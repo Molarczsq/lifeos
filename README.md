@@ -78,7 +78,7 @@ docs/                架构、验收结果、答辩大纲与演示脚本
 cd backend && python -m pytest -q
 cd frontend && pnpm build
 # 后端另行启动后
-cd frontend && pnpm exec playwright install chromium && pnpm test:e2e
+cd frontend && pnpm exec playwright install webkit && pnpm test:e2e
 ```
 真实结果见 docs/TEST_REPORT.md。测试中的模型响应为隔离的契约模拟，不是实际AI验证。评测案例 data/eval-cases.json；图像准确率、误差、真实延迟均待测，不提供虚构指标。
 
