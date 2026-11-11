@@ -90,7 +90,7 @@ python -m app.mcp_server
 这是标准 stdio MCP 服务。客户端配置 command 为当前虚拟环境 python，args 为 ["-m","app.mcp_server"]，cwd 为 backend。提供 search_knowledge 和 food_catalog，不读取任何私人用户数据。
 
 ## GitHub与部署
-本次环境没有Docker，GitHub认证失效，未推送或远程部署。已有本地Git工程、CI与容器文件。恢复授权后可执行：
+本地环境没有 Docker，尚未验证容器或远程部署。工程包含 GitHub Actions 与容器配置。创建自己的私有仓库可执行：
 ```bash
 gh auth login
 gh repo create lifeos --private --source=. --remote=origin --push

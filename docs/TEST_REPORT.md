@@ -18,6 +18,6 @@ Linux；独立 Python 3.12 虚拟环境；Next.js 15.5.29；React 19.3.1；pnpm 
 - MCP测试为官方SDK内工具注册/调用，不是远程托管或外部客户端验收。
 - Playwright测试脚本已交付；本次通过内置浏览器完成实际交互走查，未运行Playwright runner。
 - Docker不可用：未构建容器，未验证PostgreSQL运行；SQLite API测试已通过。
-- GitHub认证失效：未推送，Actions未在GitHub运行。
+- 首轮交付时 GitHub 认证失效，未执行云端 Actions；后续推送触发的实际结果请查看仓库 Actions 页面。
 - 安全测试不是完整渗透测试；关键词拦截并非完整的临床安全系统。
 - 最终新增的Function Calling、多轮上下文和反事实路径通过后端自动化验证；浏览器截图对应之前已经通过的规则闭环。
