@@ -1,17 +1,24 @@
 import os
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, String, JSON, DateTime, ForeignKey
+from sqlalchemy import create_engine, String, JSON, DateTime, ForeignKey, Float, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 class Base(DeclarativeBase): pass
 class User(Base):
     __tablename__ = 'users'
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    email: Mapped[str] = mapped_column(String, unique=True)
+    username: Mapped[str] = mapped_column(String, unique=True)
     password: Mapped[str] = mapped_column(String)
     token_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     token_expires: Mapped[float] = mapped_column(default=0)
     consents: Mapped[dict] = mapped_column(JSON, default=dict)
+class CaptchaChallenge(Base):
+    __tablename__ = 'captcha_challenges'
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    answer_hash: Mapped[str] = mapped_column(String)
+    binding_hash: Mapped[str] = mapped_column(String, index=True)
+    expires_at: Mapped[float] = mapped_column(Float, index=True)
+
 class Record(Base):
     __tablename__ = 'records'
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -24,3 +31,14 @@ engine = create_engine(url, connect_args={'check_same_thread': False} if url.sta
 Session = sessionmaker(engine, expire_on_commit=False)
 def db():
     with Session() as s: yield s
+
+
+def initialize_schema(target_engine):
+    """Upgrade v1 accounts in place before creating new tables. Preserve user IDs/data."""
+    with target_engine.begin() as conn:
+        inspector = inspect(conn)
+        if 'users' in inspector.get_table_names():
+            columns = {c['name'] for c in inspector.get_columns('users')}
+            if 'email' in columns and 'username' not in columns:
+                conn.execute(text('ALTER TABLE users RENAME COLUMN email TO username'))
+        Base.metadata.create_all(conn)

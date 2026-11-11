@@ -1,11 +1,23 @@
 from datetime import datetime, timezone
 from typing import Literal
-from pydantic import BaseModel, Field, model_validator, ConfigDict
+from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
 class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 class Auth(Strict):
-    email: str = Field(min_length=3, max_length=160, pattern=r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+    # Legacy email accounts can still log in with their complete old login name.
+    username: str = Field(min_length=3, max_length=160)
     password: str = Field(min_length=10, max_length=128)
+
+    @field_validator('username', mode='before')
+    @classmethod
+    def normalize_username(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+class Registration(Auth):
+    username: str = Field(min_length=3, max_length=32, pattern=r'^[a-zA-Z0-9_\u4e00-\u9fff]+$')
+    captcha_id: str = Field(min_length=32, max_length=64)
+    captcha_answer: str = Field(min_length=1, max_length=10)
+
 class Consent(Strict):
     diet: bool = False
     health: bool = False

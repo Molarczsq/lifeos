@@ -7,16 +7,18 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Response, UploadFi
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from PIL import Image
-from .db import Base, engine, db, User, Record
+from .db import Base, engine, db, User, Record, initialize_schema
+from .auth import router as auth_router, user
 from .schemas import Auth, Consent, Food, MealRequest, Metric, Chat, Answer, Feedback
 from .agents import FOODS, SOURCE, nutrition, search, safety, NutritionPlannerAgent, HealthInsightAgent
 from .llm import OpenAICompatibleProvider, FoodVisionAgent, ProviderUnavailable, plan_tools
 
 @asynccontextmanager
 async def lifespan(app):
-    Base.metadata.create_all(engine)
+    initialize_schema(engine)
     yield
 app=FastAPI(title='智膳 LifeOS',version='0.1.0',lifespan=lifespan)
+app.include_router(auth_router)
 P='/api/v1'
 limits=defaultdict(deque)
 @app.middleware('http')
@@ -35,16 +37,6 @@ async def guard(request, call_next):
     result.headers['X-Content-Type-Options']='nosniff'
     return result
 
-def digest(t): return hashlib.sha256(t.encode()).hexdigest()
-def password(p,salt=None):
-    salt=salt or secrets.token_hex(16)
-    return salt+':'+hashlib.scrypt(p.encode(),salt=salt.encode(),n=16384,r=8,p=1).hex()
-def user(request:Request,s=Depends(db)):
-    token=request.cookies.get('lifeos_session','')
-    u=s.scalar(select(User).where(User.token_hash==digest(token))) if token else None
-    if not u or u.token_expires<time.time(): raise HTTPException(401,'请登录')
-    return u
-
 def records(s,u,kind):
     return [{'id':r.id,**r.data} for r in s.scalars(select(Record).where(Record.user_id==u.id,Record.kind==kind).order_by(Record.created_at))]
 def put(s,u,kind,data):
@@ -53,24 +45,6 @@ def require(u,scope):
     if not u.consents.get(scope): raise HTTPException(403,'未授权：'+scope)
 @app.get(P+'/healthz')
 def healthz(): return {'status':'ok','ai':'configured-unverified' if os.getenv('LLM_API_KEY') else 'rules','nutrition':'demo-estimates','retrieval':'lexical'}
-@app.post(P+'/auth/register')
-def register(body:Auth,response:Response,s=Depends(db)):
-    email=body.email.lower()
-    if s.scalar(select(User).where(User.email==email)): raise HTTPException(409,'邮箱已注册')
-    u=User(id=str(uuid4()),email=email,password=password(body.password),consents={});s.add(u);s.commit()
-    return login(body,response,s)
-@app.post(P+'/auth/login')
-def login(body:Auth,response:Response,s=Depends(db)):
-    u=s.scalar(select(User).where(User.email==body.email.lower()))
-    if not u or not hmac.compare_digest(u.password,password(body.password,u.password.split(':')[0])): raise HTTPException(401,'邮箱或密码不正确')
-    token=secrets.token_urlsafe(32);u.token_hash=digest(token);u.token_expires=time.time()+86400;s.commit()
-    response.set_cookie('lifeos_session',token,httponly=True,samesite='strict',secure=os.getenv('COOKIE_SECURE','false')=='true',max_age=86400)
-    return {'email':u.email,'consents':u.consents}
-@app.post(P+'/auth/logout')
-def logout(response:Response,u=Depends(user),s=Depends(db)):
-    u=s.get(User,u.id);u.token_hash=None;s.commit();response.delete_cookie('lifeos_session');return {'ok':True}
-@app.get(P+'/me')
-def me(u=Depends(user)): return {'email':u.email,'consents':u.consents}
 @app.put(P+'/consents')
 def consents(body:Consent,u=Depends(user),s=Depends(db)):
     u=s.get(User,u.id);u.consents=body.model_dump();s.commit();put(s,u,'consent',{'scopes':u.consents});return u.consents

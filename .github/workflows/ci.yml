@@ -33,7 +33,7 @@ jobs:
       - name: Run mobile flow
         run: |
           cd backend
-          uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/lifeos-api.log 2>&1 &
+          python -m tests.e2e_server > /tmp/lifeos-api.log 2>&1 &
           cd ../frontend
           pnpm test:e2e || { cat /tmp/lifeos-api.log; exit 1; }
       - uses: actions/upload-artifact@v4

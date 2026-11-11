@@ -1,23 +1,7 @@
-import os
-os.environ['DATABASE_URL']='sqlite://'
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 from app import main
-from app.db import Base, Session
 from app.schemas import MealRequest, Metric
 from app.agents import nutrition, NutritionPlannerAgent, safety
-engine=create_engine('sqlite://',connect_args={'check_same_thread':False},poolclass=StaticPool)
-main.engine=engine
-Session.configure(bind=engine)
-@pytest.fixture()
-def c():
-    Base.metadata.drop_all(engine);main.limits.clear()
-    with TestClient(main.app) as c:
-        r=c.post('/api/v1/auth/register',json={'email':'test@example.com','password':'secure-test-pass'})
-        assert r.status_code==200
-        yield c
+from .helpers import register
 
 def test_nutrition():
     assert nutrition([{'food_id':'chicken','grams':100}])['totals']['protein']==31
@@ -34,7 +18,7 @@ def test_food_crud_and_isolation(c):
     assert r.status_code==200
     rid=r.json()['id']
     assert len(c.get('/api/v1/food/entries').json())==1
-    c.post('/api/v1/auth/register',json={'email':'other@example.com','password':'secure-test-pass'})
+    register(c, 'other_user')
     assert c.get('/api/v1/food/entries').json()==[]
     assert c.delete('/api/v1/records/'+rid).status_code==404
 
