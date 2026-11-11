@@ -1,0 +1,6 @@
+kind,value,unit,recorded_at
+steps,5200,steps,2026-11-01T20:00:00+08:00
+steps,6400,steps,2026-11-02T20:00:00+08:00
+steps,6100,steps,2026-11-03T20:00:00+08:00
+sleep,7.2,hours,2026-11-01T08:00:00+08:00
+sleep,7.5,hours,2026-11-02T08:00:00+08:00
