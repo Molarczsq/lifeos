@@ -3,7 +3,10 @@ test('mobile account → corrected meal → planner → advisor',async({page})=>
  await page.goto('/');
  await page.getByLabel('邮箱',{exact:true}).fill(`e2e-${Date.now()}@example.com`);
  await page.getByLabel('密码 · 至少10个字符').fill('test-long-password');
+ const registration=page.waitForResponse(r=>r.url().endsWith('/api/v1/auth/register')&&r.request().method()==='POST');
  await page.getByRole('button',{name:'创建账户，开启日常'}).click();
+ const response=await registration;
+ expect(response.status(),await response.text()).toBe(200);
  await page.getByRole('button',{name:'记录我的一餐'}).click();
  await page.getByLabel('克数',{exact:true}).fill('180');
  await page.getByRole('button',{name:'确认并保存记录'}).click();
