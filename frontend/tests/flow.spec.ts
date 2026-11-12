@@ -78,6 +78,10 @@ test('privacy defaults are enabled and manual changes survive reload', async ({p
   await register(page, 'privacy_' + Date.now());
   await page.getByRole('button', {name:'数据与隐私',exact:true}).click();
   await expect(page.getByRole('heading', {name:'数据源连接',exact:true})).toHaveCount(0);
+  await page.route('**/api/v1/consents',async route=>{
+    if(route.request().method()==='PUT') await new Promise(resolve=>setTimeout(resolve,250));
+    await route.continue();
+  });
   const options=page.locator('label.consent input[type="checkbox"]');
   await expect(options).toHaveCount(3);
   for (let i=0;i<3;i++) await expect(options.nth(i)).toBeChecked();
@@ -85,8 +89,31 @@ test('privacy defaults are enabled and manual changes survive reload', async ({p
     const saved=page.waitForResponse(r=>r.url().endsWith('/api/v1/consents') && r.request().method()==='PUT');
     await options.nth(i).uncheck();
     expect((await saved).status()).toBe(200);
+    await expect(options.nth(i)).not.toBeChecked();
+    await expect(options.nth(i)).toBeEnabled();
   }
   await page.reload();
   await page.getByRole('button', {name:'数据与隐私',exact:true}).click();
   for (let i=0;i<3;i++) await expect(options.nth(i)).not.toBeChecked();
+});
+
+
+test('privacy save failure restores the previous choice', async ({page}) => {
+  await page.goto('/');
+  await register(page,'rollback_'+Date.now());
+  await page.getByRole('button',{name:'数据与隐私',exact:true}).click();
+  await page.route('**/api/v1/consents',async route=>{
+    if(route.request().method()==='PUT')
+      await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'测试：保存失败'})});
+    else await route.continue();
+  });
+  const option=page.locator('label.consent input[type="checkbox"]').first();
+  await expect(option).toBeChecked();
+  await option.click();
+  await expect(page.getByText('测试：保存失败',{exact:true})).toBeVisible();
+  await expect(option).toBeChecked();
+  await expect(option).toBeEnabled();
+  await page.reload();
+  await page.getByRole('button',{name:'数据与隐私',exact:true}).click();
+  await expect(option).toBeChecked();
 });
