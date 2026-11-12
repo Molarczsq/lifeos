@@ -2,7 +2,7 @@ name: validate
 on: [push, pull_request]
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -10,7 +10,7 @@ jobs:
       - run: pip install -r backend/requirements.lock.txt
       - run: cd backend && python -m pytest -q
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -19,7 +19,8 @@ jobs:
         with: {node-version: '22'}
       - run: cd frontend && pnpm install --frozen-lockfile && pnpm build
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,7 +30,22 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: pip install -r backend/requirements.lock.txt
-      - run: cd frontend && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps webkit
+      - name: Install frontend dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+      - name: Install WebKit system dependencies
+        timeout-minutes: 8
+        run: |
+          printf '%s\n' 'Acquire::Retries "2";' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/80lifeos-ci
+          cd frontend
+          for attempt in 1 2; do
+            if timeout 180s pnpm exec playwright install-deps webkit; then exit 0; fi
+            echo "WebKit system dependency install failed (attempt $attempt/2)"
+            if [ "$attempt" -eq 2 ]; then exit 1; fi
+            sleep 10
+          done
+      - name: Install WebKit browser
+        timeout-minutes: 5
+        run: cd frontend && pnpm exec playwright install webkit
       - name: Run mobile flow
         run: |
           cd backend
