@@ -102,3 +102,15 @@ E2E使用CI-only固定验证码服务 `python -m tests.e2e_server`，生产环�
 - `frontend/public/food-photos/rice.webp`
 - `frontend/public/food-photos/tofu.webp`
 - `frontend/tests/flow.spec.ts`
+
+## CI限流回归修复（2026-11-13）
+
+首次设计改造提交的本地10项E2E通过，但GitHub运行 `43221614878` 的1024px和1440px场景失败。下载的trace显示 `/me`、`/auth/captcha`、`/food/images/jobs` 返回429：云端执行较快，多场景共享同一IP，在一分钟内累计超过生产每分钟180请求限制。
+
+修复方式：仅在 `tests/e2e_server.py` 的外层ASGI测试包装器提供 `POST /__test/reset-rate-limits`，每个Playwright场景开始前调用，并等待测试服务可用。生产 `app.main:app` 和Docker不装载此包装器；生产限流阈值不变。新增后端测试证明生产仍返回429、重置路径在生产不存在。
+
+另修复聊天页会话恢复：API错误携带HTTP状态，仅401显示登录入口，429/网络故障显示“重试恢复会话”。新增浏览器回归模拟首次429、重试成功，确认不会误显示注册表单。
+
+本次涉及：`backend/tests/e2e_server.py`、`backend/tests/test_e2e_isolation.py`、`frontend/lib/api.ts`、`frontend/app/advisor/page.tsx`、`frontend/tests/flow.spec.ts`及本文档。
+
+修复后本地验收：后端72项通过；TypeScript、ESLint和生产构建通过。原10项浏览器场景全部通过；新增429场景首次因定位器同时匹配Next路由播报器而失败，收窄至含错误文案的alert后，单项重跑通过（7.9秒）。完整11项将在本次推送的GitHub CI再次运行。本地测试端口为3202/8202。

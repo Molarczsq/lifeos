@@ -1,5 +1,13 @@
 import {test, expect, Page} from '@playwright/test';
 
+// Each scenario gets its own rate-limit window on the CI-only server.
+// Production keeps its normal limit and does not expose this endpoint.
+test.beforeEach(async({request})=>{
+ await expect.poll(async()=>{
+  try{return (await request.post((process.env.API_INTERNAL_URL||'http://127.0.0.1:8000')+'/__test/reset-rate-limits',{timeout:2000})).status()}catch{return 0}
+ },{timeout:10000}).toBe(204);
+});
+
 // Only the CI-only test server generates this known image; production is always random.
 const captchaAnswer = 'K7M9Q';
 async function register(page: Page, username: string) {
@@ -226,3 +234,15 @@ for(const width of [375,768,1024,1440]){
   await expect(page.getByRole('heading',{name:'拍一张，认识这一餐'})).toBeVisible();
  });
 }
+
+
+test('advisor retries a transient session error without showing registration',async({page})=>{
+ await page.goto('/');await register(page,'retry_'+Date.now());
+ let fail=true;
+ await page.route('**/api/v1/me',route=>fail?route.fulfill({status:429,body:'Too many requests'}):route.continue());
+ await page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'问问智膳'}).click();
+ await expect(page.getByRole('alert').filter({hasText:'请求过于频繁'})).toBeVisible();
+ await expect(page.getByRole('form',{name:'账户注册'})).toHaveCount(0);
+ fail=false;await page.getByRole('button',{name:'重试恢复会话'}).click();
+ await expect(page.getByRole('heading',{name:'今天，想从哪里开始？'})).toBeVisible();
+});
