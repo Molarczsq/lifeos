@@ -17,7 +17,7 @@ jobs:
         with: {version: '11.25.0'}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - run: cd frontend && pnpm install --frozen-lockfile && pnpm build
+      - run: cd frontend && pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm build
   e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -46,6 +46,8 @@ jobs:
       - name: Install WebKit browser
         timeout-minutes: 5
         run: cd frontend && pnpm exec playwright install webkit
+      - name: Build production frontend for E2E
+        run: cd frontend && pnpm build
       - name: Run mobile flow
         run: |
           cd backend

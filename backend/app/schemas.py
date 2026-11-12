@@ -54,9 +54,48 @@ class Metric(Strict):
         self.recorded_at = self.recorded_at.astimezone(timezone.utc)
         return self
 class Chat(Strict):
+    stream: bool = False
     message: str = Field(min_length=1, max_length=2000)
+    conversation_id: str | None = Field(default=None, max_length=64)
+    regenerate_id: str | None = Field(default=None, max_length=64)
+    image_id: str | None = Field(default=None, max_length=64)
 class Answer(Strict):
     text: str = Field(min_length=1, max_length=5000)
 class Feedback(Strict):
     meal_id: str
     action: Literal['like','dislike','favorite']
+
+class CatalogInput(Strict):
+    name: str = Field(min_length=1, max_length=80)
+    category: str = Field(default='其他', min_length=1, max_length=60)
+    ingredients: list[str] = Field(default_factory=list, max_length=30)
+    kcal: float = Field(ge=0, le=1000)
+    protein: float = Field(ge=0, le=100)
+    fat: float = Field(ge=0, le=100)
+    carbs: float = Field(ge=0, le=100)
+    image_id: str | None = Field(default=None, max_length=64)
+
+    @field_validator('name', 'category')
+    @classmethod
+    def trim(cls, value):
+        value = value.strip()
+        if not value: raise ValueError('不能为空')
+        return value
+
+    @field_validator('ingredients')
+    @classmethod
+    def check_ingredients(cls, value):
+        if any(not i.strip() or len(i)>80 for i in value): raise ValueError('食材名称不合法')
+        return [i.strip() for i in value]
+
+class DetectedFood(CatalogInput):
+    grams: float = Field(gt=0, le=2000)
+    confidence: float = Field(ge=0, le=1)
+
+class DynamicVision(Strict):
+    items: list[DetectedFood] = Field(max_length=20)
+    explanation: str = Field(max_length=1500)
+    question: str = Field(default='', max_length=500)
+
+class ConversationInput(Strict):
+    title: str = Field(default='新的对话', min_length=1, max_length=80)

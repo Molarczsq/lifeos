@@ -1,4 +1,5 @@
 import random
+import re
 from collections import defaultdict
 # Explicit illustrative seed values; not a verified laboratory dataset.
 FOODS = {
@@ -49,4 +50,26 @@ class HealthInsightAgent:
 def safety(text):
     if any(w in text.lower() for w in ['胸痛','呼吸困难','昏厥','chest pain']): return '如果正在出现胸痛、呼吸困难或昏厥，请立即寻求当地急救帮助。此工具无法判断病情。'
     if any(w in text.lower() for w in ['处方','诊断','药量','停药','胰岛素','催吐','绝食','自杀','suicide']): return '我不能提供诊断、药物调整或危险的体重控制方案。请联系合格医疗人员获得个体化支持。'
+    return None
+
+
+def review_answer(text):
+    """Rule-based output review; distinguish boundary statements from advice.
+
+    Input triage stays in safety(). This is not a clinical safety classifier.
+    Check each clause so a disclaimer cannot exempt subsequent instructions.
+    """
+    for clause in re.split(r'[。！？!?；;，,\n]|但是|不过|然而|但', text):
+        # Remove only explicit refusals/boundaries, not the whole answer.
+        cleaned = re.sub(
+            r'(?:不能|无法|不会|不应|不要|不可以|不)(?:为你|为您)?(?:提供|进行|做出|作出|替代|代替|建议|自行)?'
+            r'(?:疾病|医疗|医生的|医生|专业|医学|任何|具体|个体化|药物调整|治疗|或|和|及|、|与|\s)*'
+            r'(?:诊断|处方|停药|药量|催吐|绝食|胰岛素)'
+            r'(?:(?:、|或|和|及|与)(?:诊断|处方|治疗|药量|停药|催吐|绝食))*',
+            '', clause)
+        # Emergency guidance generated in an answer is not a new user symptom.
+        cleaned = re.sub(r'胸痛|呼吸困难|昏厥|chest pain', '', cleaned, flags=re.I)
+        blocked = safety(cleaned)
+        if blocked:
+            return blocked
     return None

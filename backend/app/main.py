@@ -7,11 +7,14 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Response, UploadFi
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from PIL import Image
-from .db import Base, engine, db, User, Record, initialize_schema
+from .db import Base, engine, db, User, Record, initialize_schema, CatalogFood, MediaAsset, Conversation
 from .auth import router as auth_router, user
+from .catalog import router as catalog_router, catalog_map, estimate
+from .media import router as media_router, owned_image, image_url
+from .advisor import router as advisor_router, resolve_conversation
 from .schemas import Auth, Consent, Food, MealRequest, Metric, Chat, Answer, Feedback
-from .agents import FOODS, SOURCE, nutrition, search, safety, NutritionPlannerAgent, HealthInsightAgent
-from .llm import OpenAICompatibleProvider, FoodVisionAgent, ProviderUnavailable, plan_tools
+from .agents import FOODS, SOURCE, nutrition, search, safety, review_answer, NutritionPlannerAgent, HealthInsightAgent
+from .llm import OpenAICompatibleProvider, FoodVisionAgent, ProviderUnavailable, plan_tools, stream_answer
 
 @asynccontextmanager
 async def lifespan(app):
@@ -19,6 +22,9 @@ async def lifespan(app):
     yield
 app=FastAPI(title='智膳 LifeOS',version='0.1.0',lifespan=lifespan)
 app.include_router(auth_router)
+app.include_router(catalog_router)
+app.include_router(media_router)
+app.include_router(advisor_router)
 P='/api/v1'
 limits=defaultdict(deque)
 @app.middleware('http')
@@ -48,27 +54,9 @@ def healthz(): return {'status':'ok','ai':'configured-unverified' if os.getenv('
 @app.put(P+'/consents')
 def consents(body:Consent,u=Depends(user),s=Depends(db)):
     u=s.get(User,u.id);u.consents=body.model_dump();s.commit();put(s,u,'consent',{'scopes':u.consents});return u.consents
-@app.get(P+'/food/catalog')
-def catalog(u=Depends(user)): return {'foods':FOODS,'source':SOURCE}
-@app.post(P+'/food/analyze')
-async def analyze(file:UploadFile=File(...),u=Depends(user)):
-    require(u,'external_ai')
-    data=await file.read(5_000_001)
-    if len(data)>5_000_000: raise HTTPException(413,'图片须小于5MB')
-    try:
-        im=Image.open(io.BytesIO(data));
-        if im.width*im.height>20_000_000: raise ValueError('图片像素过大')
-        im.verify()
-        im=Image.open(io.BytesIO(data)); im.thumbnail((1200,1200)); out=io.BytesIO();im.convert('RGB').save(out,format='JPEG',quality=80)
-    except Exception: raise HTTPException(422,'无法读取图片') from None
-    try: result=await FoodVisionAgent().run('data:image/jpeg;base64,'+base64.b64encode(out.getvalue()).decode(),FOODS)
-    except ProviderUnavailable as e: raise HTTPException(503,str(e)+'；请手动选择食物与份量')
-    if any(i.food_id not in FOODS for i in result.items): raise HTTPException(502,'模型返回未知食物，请手动输入')
-    return {**result.model_dump(),'mode':'live-model','warning':'份量、油盐与隐藏成分无法准确测定；置信度未经校准，请人工修正。'}
 @app.post(P+'/food/entries')
 def add_food(body:Food,u=Depends(user),s=Depends(db)):
-    if any(i.food_id not in FOODS for i in body.items): raise HTTPException(422,'未知食物')
-    return put(s,u,'food',{**body.model_dump(mode='json'),**nutrition([i.model_dump() for i in body.items])})
+    return put(s,u,'food',{**body.model_dump(mode='json'),**estimate([i.model_dump() for i in body.items],catalog_map(s,u))})
 @app.get(P+'/food/entries')
 def foods(u=Depends(user),s=Depends(db)): return records(s,u,'food')
 @app.delete(P+'/records/{record_id}')
@@ -120,9 +108,18 @@ def knowledge(q:str='',u=Depends(user)): return {'documents':search(q[:2000]),'m
 @app.get(P+'/advisor/sessions')
 def sessions(u=Depends(user),s=Depends(db)): return records(s,u,'chat')
 class AdvisorOrchestrator:
-    async def run(self,body,u,s):
+    async def run(self,body,u,s,request=None):
         blocked=safety(body.message)
-        if blocked: yield {'type':'answer','text':blocked,'mode':'safety','citations':[]};return
+        if blocked:
+            result={'text':blocked,'mode':'safety','citations':[]}
+            revisions=records(s,u,'consent')
+            revision=revisions[-1]['id'] if revisions else 'initial'
+            if body.regenerate_id:
+                old=s.get(Record,body.regenerate_id)
+                if old: s.delete(old)
+            put(s,u,'chat',{'question':body.message,**result,'consent_revision':revision,'conversation_id':body.conversation_id,'image_id':body.image_id})
+            yield {'type':'answer',**result}
+            return
         yield {'type':'step','name':'权限检查完成'}
         allowed=['nutrition_search','meal_plan','mystery_box']
         if u.consents.get('diet'): allowed.append('food_log')
@@ -146,34 +143,69 @@ class AdvisorOrchestrator:
                 docs=search(body.message);context[name]=docs
             else:
                 req=MealRequest(mode='surprise' if name=='mystery_box' else 'healthy')
-                candidates=NutritionPlannerAgent().run(req,records(s,u,'feedback'))
+                candidates=NutritionPlannerAgent().run(req,records(s,u,'feedback') if u.consents.get('diet') else [])
                 context[name]={'assumptions':'默认预算30元；尚未提供过敏原，食用前必须核实', 'meals':candidates[:1] if name=='mystery_box' else candidates}
             yield {'type':'step','name':'已执行工具：'+name}
         revisions=records(s,u,'consent');revision=revisions[-1]['id'] if revisions else 'initial'
-        history=[{'question':r['question'],'answer':r['text']} for r in records(s,u,'chat') if r.get('consent_revision')==revision][-6:]
+        history=[{'question':r['question'],'answer':r['text']} for r in records(s,u,'chat') if r.get('consent_revision')==revision and r.get('conversation_id')==body.conversation_id and r['id']!=body.regenerate_id][-6:]
         fallback='目前为规则模式。'+(' '.join(d['text'] for d in docs) or '你可以先记录一餐或一项活动，再观察连续多天的变化。')
         mode='rules'; answer=fallback
         if live:
             try:
-                result=await OpenAICompatibleProvider().generate(json.dumps({'question':body.message,'history_same_consent_revision':history,'authorized_tool_results':context},ensure_ascii=False),Answer)
-                answer=safety(result.text) or result.text;mode='live-model'
-            except ProviderUnavailable: answer=fallback+' 模型暂时不可用，已降级。';mode='fallback'
+                prompt=json.dumps({'question':body.message,'history_same_consent_revision':history,'authorized_tool_results':context},ensure_ascii=False)
+                if body.stream:
+                    result=None
+                    async for chunk in stream_answer(prompt,image_url(owned_image(s,u,body.image_id)) if body.image_id else None):
+                        if request and await request.is_disconnected(): return
+                        if chunk['type']=='draft':
+                            if not review_answer(chunk['text']): yield chunk
+                        else: result=Answer(text=chunk['text'])
+                    if result is None: raise ProviderUnavailable('缺少完整回答')
+                elif body.image_id:
+                    result=await OpenAICompatibleProvider().generate(prompt,Answer,image_url(owned_image(s,u,body.image_id)))
+                else:
+                    result=await OpenAICompatibleProvider().generate(prompt,Answer)
+                reviewed=review_answer(result.text)
+                answer=reviewed or result.text;mode='safety' if reviewed else 'live-model'
+            except ProviderUnavailable:
+                yield {'type':'draft','text':''}
+                answer=fallback+' 模型暂时不可用，已降级。';mode='fallback'
         result={'text':answer,'mode':mode,'citations':docs}
-        put(s,u,'chat',{'question':body.message,**result,'consent_revision':revision})
+        if request and await request.is_disconnected(): return
+        if body.conversation_id and not s.scalar(select(Conversation.id).where(Conversation.id==body.conversation_id,Conversation.user_id==u.id)): return
+        if body.regenerate_id:
+            old=s.get(Record,body.regenerate_id)
+            if old: s.delete(old)
+        put(s,u,'chat',{'question':body.message,**result,'consent_revision':revision,'conversation_id':body.conversation_id,'image_id':body.image_id})
         yield {'type':'answer',**result}
 @app.post(P+'/advisor/chat/stream')
-async def chat(body:Chat,u=Depends(user),s=Depends(db)):
+async def chat(body:Chat,request:Request,u=Depends(user),s=Depends(db)):
+    if body.image_id:
+        require(u,'external_ai')
+        owned_image(s,u,body.image_id)
+    conversation=resolve_conversation(s,u,body.conversation_id,body.message)
+    body=body.model_copy(update={'conversation_id':conversation.id})
+    if body.regenerate_id:
+        previous=s.get(Record,body.regenerate_id)
+        if not previous or previous.user_id!=u.id or previous.kind!='chat' or previous.data.get('conversation_id')!=conversation.id:
+            raise HTTPException(404,'原消息不存在')
+        body=body.model_copy(update={'message':previous.data['question'],'image_id':previous.data.get('image_id')})
+        if body.image_id:
+            require(u,'external_ai');owned_image(s,u,body.image_id)
     async def events():
-        async for event in AdvisorOrchestrator().run(body,u,s):
+        yield 'data: '+json.dumps({'type':'session','id':conversation.id})+'\n\n'
+        async for event in AdvisorOrchestrator().run(body,u,s,request):
             yield 'data: '+json.dumps(event,ensure_ascii=False)+'\n\n'
         yield 'data: '+json.dumps({'type':'done'})+'\n\n'
     return StreamingResponse(events(),media_type='text/event-stream',headers={'X-Accel-Buffering':'no'})
 @app.get(P+'/data/export')
 def export(u=Depends(user),s=Depends(db)):
-    return {'version':1,'consents':u.consents,'records':[{'id':r.id,'kind':r.kind,'data':r.data} for r in s.scalars(select(Record).where(Record.user_id==u.id))]}
+    return {'version':2,'catalog':list(catalog_map(s,u).values()),'conversations':[{'id':c.id,'title':c.title} for c in s.scalars(select(Conversation).where(Conversation.user_id==u.id))],'consents':u.consents,'records':[{'id':r.id,'kind':r.kind,'data':r.data} for r in s.scalars(select(Record).where(Record.user_id==u.id))]}
 @app.delete(P+'/data')
 def erase(u=Depends(user),s=Depends(db)):
-    s.execute(delete(Record).where(Record.user_id==u.id));u=s.get(User,u.id);u.consents={};s.commit();return {'ok':True}
+    for model in (Record,CatalogFood,MediaAsset,Conversation):
+        s.execute(delete(model).where(model.user_id==u.id))
+    u=s.get(User,u.id);u.consents={};s.commit();return {'ok':True}
 
 @app.get(P+'/openapi.json',include_in_schema=False)
 def versioned_openapi(): return app.openapi()
@@ -181,10 +213,10 @@ def versioned_openapi(): return app.openapi()
 @app.post(P+'/meals/simulate')
 def simulate(body:Food,u=Depends(user),s=Depends(db)):
     require(u,'diet')
-    if any(i.food_id not in FOODS for i in body.items): raise HTTPException(422,'未知食物')
+    estimate([i.model_dump() for i in body.items],catalog_map(s,u))
     current=records(s,u,'food')
     now=datetime.now(timezone.utc).date()
     today=[r for r in current if datetime.fromisoformat(r['recorded_at']).astimezone(timezone.utc).date()==now]
     before={k:round(sum(r['totals'][k] for r in today),1) for k in ['kcal','protein','fat','carbs']}
-    added=nutrition([i.model_dump() for i in body.items])['totals']
+    added=estimate([i.model_dump() for i in body.items],catalog_map(s,u))['totals']
     return {'before':before,'after':{k:round(before[k]+added[k],1) for k in before},'estimated':True,'day_boundary':'UTC','note':'仅为已记录饮食加本餐的估计，不代表医学预测或个人目标；不会保存餐食'}
