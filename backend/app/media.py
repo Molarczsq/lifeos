@@ -64,7 +64,8 @@ def delete_image(image_id: str, u=Depends(user), s=Depends(db)):
     asset=owned_image(s,u,image_id)
     for row in s.scalars(select(CatalogFood).where(CatalogFood.user_id==u.id)):
         if row.data.get('image_id')==image_id:
-            row.data={**row.data, 'image_id':None}
+            from .catalog import image_fields
+            row.data={**row.data, 'image_id':None, **image_fields(row.data['name'],row.data['category'])}
     for row in s.scalars(select(Record).where(Record.user_id==u.id, Record.kind.in_(['chat','vision']))):
         if row.data.get('image_id')==image_id:
             row.data={**row.data,'image_id':None}

@@ -99,3 +99,6 @@ class DynamicVision(Strict):
 
 class ConversationInput(Strict):
     title: str = Field(default='新的对话', min_length=1, max_length=80)
+
+class FoodNameRequest(Strict):
+    name: str = Field(min_length=1, max_length=80)

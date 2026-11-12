@@ -123,14 +123,16 @@ test('dynamic food persists and full advisor keeps conversations isolated', asyn
   await register(page,'catalog_'+Date.now());
   await page.getByRole('button',{name:'食物目录',exact:true}).click();
   const food='测试蔬菜汤'+Date.now();
+  await page.getByRole('button',{name:'添加食物',exact:true}).click();
+  await page.getByRole('button',{name:'完全手动录入',exact:false}).click();
   await page.getByLabel('食物名称',{exact:true}).fill(food);
   await page.getByLabel('热量 kcal / 100g',{exact:true}).fill('40');
   await page.getByRole('button',{name:'保存食物到目录',exact:true}).click();
-  await expect(page.getByLabel('搜索食物',{exact:true})).toHaveValue(food);
-  await page.getByRole('button',{name:'食物目录',exact:true}).click();
-  await page.locator('.catalog-tile').filter({hasText:food}).getByRole('button',{name:'编辑',exact:true}).click();
+  await page.locator('.catalog-tile').filter({hasText:food}).getByRole('button',{name:'详情',exact:true}).click();
+  await page.getByRole('button',{name:'编辑',exact:true}).click();
   await page.getByLabel('热量 kcal / 100g',{exact:true}).fill('45');
   await page.getByRole('button',{name:'保存食物到目录',exact:true}).click();
+  await page.locator('.catalog-tile').filter({hasText:food}).getByRole('button',{name:'选择',exact:true}).click();
   await expect(page.getByLabel('搜索食物',{exact:true})).toHaveValue(food);
   await page.getByRole('button',{name:'确认并保存记录'}).click();
   await expect(page.getByRole('status').filter({hasText:'已保存到你的饮食记录'})).toBeVisible();
@@ -171,6 +173,7 @@ test.describe('desktop advisor',()=>{
     await page.getByLabel('输入问题',{exact:true}).fill('如何搭配蔬菜');
     await page.getByRole('button',{name:'发送',exact:true}).click();
     await expect(page.getByRole('button',{name:'复制消息',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'展开历史对话',exact:true}).click();
     await expect(page.getByRole('navigation',{name:'历史对话'})).toBeVisible();
     page.once('dialog',dialog=>dialog.accept('我的饮食计划'));
     await page.getByRole('button',{name:'重命名 如何搭配蔬菜',exact:true}).click();
@@ -183,3 +186,43 @@ test.describe('desktop advisor',()=>{
     await expect(page.getByRole('navigation',{name:'历史对话'}).getByRole('button',{name:'我的饮食计划',exact:true})).toHaveCount(0);
   });
 });
+
+for(const width of [375,768,1024,1440]){
+ test('shared shell and catalog at '+width+'px',async({page})=>{
+  await page.setViewportSize({width,height:900});
+  await page.goto('/');await register(page,'design_'+width+'_'+Date.now());
+  await page.getByRole('button',{name:'食物目录',exact:true}).click();
+  await expect(page.locator('.catalog-tile')).toHaveCount(6);
+  await expect(page.getByLabel('食物名称',{exact:true})).toHaveCount(0);
+  const image=page.locator('.catalog-cover img').first();
+  await expect(image).toBeVisible();
+  expect(await image.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth>0)).toBe(true);
+  await page.getByRole('button',{name:'添加食物',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'添加食物'})).toBeVisible();
+  await page.getByRole('button',{name:'输入名称，让 AI 补充',exact:false}).click();
+  await page.route('**/api/v1/food/catalog/suggest',route=>route.fulfill({json:{proposal:{name:'草稿汤',category:'汤',ingredients:['蔬菜'],kcal:30,protein:2,fat:1,carbs:3,image_id:null},warning:'估算',saved:false}}));
+  await page.getByLabel('食物名称',{exact:true}).fill('草稿汤');
+  await page.getByRole('button',{name:'生成草稿',exact:true}).click();
+  await expect(page.getByLabel('热量 kcal / 100g',{exact:true})).toHaveValue('30');
+  await page.getByRole('button',{name:'关闭弹窗'}).click();
+  await expect(page.locator('.catalog-tile')).toHaveCount(6);
+  await page.screenshot({path:'test-results/catalog-'+width+'.png',fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  await page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'问问智膳'}).click();
+  await expect(page.getByRole('heading',{name:'今天，想从哪里开始？'})).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'问问智膳'})).toHaveAttribute('aria-current','page');
+  await expect(page.locator('.suggestion-grid button')).toHaveCount(4);
+  if(width<=760){const selected=await page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'问问智膳'}).boundingBox();expect(selected!.x).toBeGreaterThanOrEqual(0);expect(selected!.x+selected!.width).toBeLessThanOrEqual(width)}
+  await expect(page.getByRole('navigation',{name:'历史对话'})).toHaveCount(0);
+  await page.getByRole('button',{name:'展开历史对话'}).click();
+  await expect(page.getByRole('dialog',{name:'历史对话'})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const composer=await page.locator('.advisor-composer').boundingBox();
+  expect(composer!.y+composer!.height).toBeLessThan(900-(width<=760?69:0));
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  await page.screenshot({path:'test-results/advisor-'+width+'.png',fullPage:true});
+  await page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'记录一餐'}).click();
+  await expect(page.getByRole('heading',{name:'拍一张，认识这一餐'})).toBeVisible();
+ });
+}

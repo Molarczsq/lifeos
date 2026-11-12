@@ -153,3 +153,13 @@ pnpm exec playwright install --with-deps webkit
 CI=1 pnpm test:e2e
 ```
 `tests/e2e_server.py` 仅固定测试验证码，不模拟供应商。后端供应商契约测试使用明确的 MockTransport / monkeypatch，无需真实密钥。E2E 不设置模型密钥，验证规则路径、UI、Cookie、目录和会话数据链路。真实供应商、视觉准确率、真实调用延迟不在这些测试结论内。
+
+## 统一设计系统与图鉴更新
+
+首页各模块与 `/advisor` 共用 `AppShell`、主导航、顶栏、品牌和设计Token。聊天历史改为按需打开，保留流式对话和所有会话操作。食物目录采用响应网格与详情弹窗，“添加食物”支持AI图片草稿、名称AI补充和手动录入，确认后保存。
+
+图片优先采用用户上传的对应照片；不再将整盘照片自动绑定多项食物。没有可靠单品照片时显示带“非实拍”标识的原创分类SVG。基础6种食物已配备核验过的开放许可照片，详情展示作者和许可，见 [图片授权记录](docs/FOOD_IMAGE_CREDITS.md)。开放式在线图库搜索和生成服务尚未接入。图片修复按钮以每批20项处理历史关联，任务状态按用户持久化。
+
+新增接口：`POST /api/v1/food/catalog/suggest`、`POST /api/v1/food/analyze?preview=true`、`POST /api/v1/food/images/repair`、`GET /api/v1/food/images/jobs`。使用既有Cookie认证。图片字段扩展已有JSON，不需要删除数据库或重建数据卷。环境变量沿用现有LLM配置。
+
+组件结构、图片来源规则、兼容说明和测试方式见 [统一设计说明](docs/DESIGN_SYSTEM.md)。

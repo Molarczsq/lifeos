@@ -6,7 +6,7 @@ export async function api(path: string, init: RequestInit = {}) {
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: '服务连接失败，请稍后重试' }));
-    throw new Error(typeof error.detail === 'string' ? error.detail : '输入格式不正确，请检查用户名、密码与验证码');
+    throw new Error(typeof error.detail === 'string' ? error.detail : '输入格式不正确，请检查填写内容');
   }
   return response.json();
 }

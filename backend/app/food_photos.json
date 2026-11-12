@@ -1,0 +1,68 @@
+{
+  "rice": {
+    "file": "/food-photos/rice.webp",
+    "title": "Par cooked brown rice - stonesoup.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Par_cooked_brown_rice_-_stonesoup.jpg",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0",
+    "author": "jules / stonesoup",
+    "sha256": "94463662e0e9326f33df341f26b15d6992abdab8cb25f5e4035a8605f02f6299",
+    "changes": "缩小并转换为WebP；页面以4:3裁切显示",
+    "retrieved": "2026-11-12"
+  },
+  "broccoli": {
+    "file": "/food-photos/broccoli.webp",
+    "title": "Cooked broccoli florets in a textured glass bowl.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Cooked_broccoli_florets_in_a_textured_glass_bowl.jpg",
+    "license": "CC BY-SA 3.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "author": "Horacio Cambeiro",
+    "sha256": "8d2895df850e7cd6f7905314911e009c8e25aee1afb13f218e230b1bc101d384",
+    "changes": "缩小并转换为WebP；页面以4:3裁切显示",
+    "retrieved": "2026-11-12"
+  },
+  "chicken": {
+    "file": "/food-photos/chicken.webp",
+    "title": "Butterflied chicken breast.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Butterflied_chicken_breast.jpg",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "author": "The Bushranger",
+    "sha256": "63147b2f0513d0ff49493209ab1b64644ad7c4b5a3a9856d3a9b9b5d698af12f",
+    "changes": "缩小并转换为WebP；页面以4:3裁切显示",
+    "retrieved": "2026-11-12"
+  },
+  "tofu": {
+    "file": "/food-photos/tofu.webp",
+    "title": "Tofu 4.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Tofu_4.jpg",
+    "license": "CC0",
+    "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "author": "fireworks",
+    "sha256": "af03f1da847b7dc32dcfc669fbc4eb4557280db84c382663e4003151ab8f1d0e",
+    "changes": "缩小并转换为WebP；页面以4:3裁切显示",
+    "retrieved": "2026-11-12"
+  },
+  "egg": {
+    "file": "/food-photos/egg.webp",
+    "title": "Eihälfte.JPG",
+    "source": "https://commons.wikimedia.org/wiki/File:Eih%C3%A4lfte.JPG",
+    "license": "CC BY-SA 3.0",
+    "license_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+    "author": "Reinhard Kirchner",
+    "sha256": "64ebc664baf56868dd6627ee7c2ade3ebbf46497260a2b7db35f069ebf440674",
+    "changes": "缩小并转换为WebP；页面以4:3裁切显示",
+    "retrieved": "2026-11-12"
+  },
+  "oats": {
+    "file": "/food-photos/oats.webp",
+    "title": "Rolled oats.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Rolled_oats.jpg",
+    "license": "Public domain",
+    "license_url": "",
+    "author": "en:user:Hankwang",
+    "sha256": "9274a40859cfd0006f73613f2f01a5bc3fdd90d5a8fb30130f679325526bc40b",
+    "changes": "缩小并转换为WebP；页面以4:3裁切显示",
+    "retrieved": "2026-11-12"
+  }
+}

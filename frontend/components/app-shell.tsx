@@ -1,0 +1,18 @@
+'use client';
+import {ReactNode,CSSProperties,useEffect,useState,useRef} from 'react';
+import {Leaf,LayoutDashboard,ScanLine,Utensils,Gift,Activity,ShieldCheck,History,MessageCircle,Sun,LogOut,ArrowUpRight} from 'lucide-react';
+import {UserProfile} from './auth-panel';
+export const navigation=[['overview','健康驾驶舱',LayoutDashboard],['scan','记录一餐',ScanLine],['plan','下一餐灵感',Utensils],['box','食物盲盒',Gift],['health','身体与运动',Activity],['catalog','食物目录',Utensils],['history','历史记录',History],['settings','数据与隐私',ShieldCheck],['advisor','问问智膳',MessageCircle]] as const;
+export function Brand(){return <><span className="logo"><Leaf aria-hidden="true"/></span>智膳 <b>LifeOS</b></>}
+export function AppShell({active,profile,onNavigate,onLogout,ai,children,overlay,chat=false}:{active:string;profile:UserProfile|null;onNavigate?:(id:string)=>void;onLogout:()=>void;ai?:string;children:ReactNode;overlay?:ReactNode;chat?:boolean}){
+ const [dark,setDark]=useState(false);
+ const sidebar=useRef<HTMLElement>(null);
+ const [viewportHeight,setViewportHeight]=useState<number|null>(null);
+ useEffect(()=>{if(!chat)return;const viewport=window.visualViewport;const update=()=>setViewportHeight(viewport?.height||window.innerHeight);update();viewport?.addEventListener('resize',update);return()=>viewport?.removeEventListener('resize',update)},[chat]);
+ useEffect(()=>{const node=sidebar.current;const selected=node?.querySelector<HTMLElement>('[aria-current=page]');if(node&&selected&&window.innerWidth<=760)node.scrollLeft=selected.offsetLeft-node.clientWidth/2+selected.clientWidth/2},[active,profile]);
+ useEffect(()=>{setDark(localStorage.getItem('lifeos-theme')==='dark')},[]);
+ function theme(){setDark(!dark);localStorage.setItem('lifeos-theme',dark?'light':'dark')}
+ return <div style={viewportHeight?{'--viewport-height':viewportHeight+'px'} as CSSProperties:undefined} className={'app'+(dark?' dark':'')+(!profile?' auth-shell':'')+(chat?' chat-page':'')}>
+ {profile&&<aside ref={sidebar} className="global-sidebar"><a className="brand" href="/?tab=overview"><Brand/></a><small className="eyebrow">YOUR EVERYDAY WELLNESS</small><nav aria-label="主导航">{navigation.map(([id,label,Icon])=>onNavigate&&id!=='advisor'?<button key={id} className={active===id?'selected':''} aria-current={active===id?'page':undefined} onClick={()=>onNavigate(id)}><Icon size={19}/>{label}{active===id&&<span className="dot"/>}</button>:<a key={id} className={'nav-advisor '+(active===id?'selected':'')} aria-current={active===id?'page':undefined} href={id==='advisor'?'/advisor?context='+encodeURIComponent(active):'/?tab='+id}><Icon size={19}/>{label}{active===id&&<span className="dot"/>}</a>)}</nav><div className="sidebar-bottom"><ShieldCheck size={20}/><b>健康数据，由你掌握</b><p>按需授权，随时撤回。<br/>你的日常，留在你的账户里。</p><a className="ghost" href="/?tab=settings">管理隐私 <ArrowUpRight size={14}/></a></div><small>LifeOS MVP · 一般健康教育</small></aside>}
+ <div className="workspace"><header className="global-header"><span><span className="live-dot"/>把健康过成日常</span><div><span className="badge">{ai==='configured-unverified'?'模型已配置 · 待验证':'一般生活方式参考'}</span><button className="icon" aria-label="切换深色模式" onClick={theme}><Sun size={19}/></button>{profile&&<button className="icon" aria-label="退出登录" onClick={onLogout}><LogOut size={18}/></button>}<span className="avatar" aria-label={profile?`当前用户：${profile.username}`:'智膳'}>{profile?profile.username.slice(0,1).toUpperCase():'L'}</span></div></header><main className="page-container"><div className="title-row"><div><small className="eyebrow">A LITTLE BETTER, EVERY DAY</small><h1>{profile?navigation.find(n=>n[0]===active)?.[1]:'欢迎来到智膳'}</h1><p>{chat?'聊聊饮食、运动，或者明天的小目标。':'无需完美，从今天的一个小选择开始。'}</p></div></div>{children}</main></div>{overlay}</div>
+}
