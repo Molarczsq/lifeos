@@ -56,6 +56,7 @@ export function AuthPanel({ disabled, onAuthenticated }: { disabled: boolean; on
           onChange={e => setAnswer(e.target.value)} aria-describedby="captcha-help"/></label>
         <small id="captcha-help">输入图中5位字母或数字，不区分大小写。5分钟内有效，每次提交后需换新图。</small>
       </div>}
+      {mode === 'register' && <p className="muted">新账户默认开启饮食上下文、身体健康上下文和外部 AI 处理；主动使用 AI 时，问题、图片及相关记录可发送给模型供应商。可在“数据与隐私”中关闭。</p>}
       {error && <p className="auth-error" role="alert">{error}</p>}
       <p className="muted">仅使用必要的 HttpOnly 会话 Cookie 保持登录。密码加盐哈希存储；登录后自动加载该账户的数据库记录，Cookie 不保存密码或健康数据。</p>
       <button disabled={disabled || pending || (mode === 'register' && (!challenge.data || challenge.isFetching || challenge.isError))}>

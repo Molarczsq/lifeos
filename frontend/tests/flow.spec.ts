@@ -71,3 +71,22 @@ test('invalid image code rejects registration and refreshes the challenge', asyn
   await page.getByRole('button', {name:'创建账户，开启日常'}).click();
   await expect(page.getByRole('navigation', {name:'主导航'})).toBeVisible();
 });
+
+
+test('privacy defaults are enabled and manual changes survive reload', async ({page}) => {
+  await page.goto('/');
+  await register(page, 'privacy_' + Date.now());
+  await page.getByRole('button', {name:'数据与隐私',exact:true}).click();
+  await expect(page.getByRole('heading', {name:'数据源连接',exact:true})).toHaveCount(0);
+  const options=page.locator('label.consent input[type="checkbox"]');
+  await expect(options).toHaveCount(3);
+  for (let i=0;i<3;i++) await expect(options.nth(i)).toBeChecked();
+  for (let i=0;i<3;i++) {
+    const saved=page.waitForResponse(r=>r.url().endsWith('/api/v1/consents') && r.request().method()==='PUT');
+    await options.nth(i).uncheck();
+    expect((await saved).status()).toBe(200);
+  }
+  await page.reload();
+  await page.getByRole('button', {name:'数据与隐私',exact:true}).click();
+  for (let i=0;i<3;i++) await expect(options.nth(i)).not.toBeChecked();
+});

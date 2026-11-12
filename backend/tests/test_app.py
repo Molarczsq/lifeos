@@ -27,6 +27,8 @@ def test_invalid_food(c):
         assert c.post('/api/v1/food/entries',json={'items':[item]}).status_code==422
 
 def test_consent_chat_and_delete(c):
+    assert c.post('/api/v1/health/insights').status_code==200
+    c.put('/api/v1/consents',json={'diet':False,'health':False,'external_ai':False})
     assert c.post('/api/v1/health/insights').status_code==403
     c.put('/api/v1/consents',json={'health':True})
     assert c.post('/api/v1/health/insights').status_code==200
@@ -60,6 +62,7 @@ def test_safety(c):
     assert '急救' in r.text
 
 def test_no_key_vision(c):
+    c.put('/api/v1/consents',json={'external_ai':False})
     import io
     from PIL import Image
     b=io.BytesIO();Image.new('RGB',(20,20)).save(b,format='PNG')
@@ -93,6 +96,7 @@ def test_consent_revisions_bound_chat_history(c, monkeypatch):
 
 def test_counterfactual_and_mystery_rotation(c):
     payload={'items':[{'food_id':'rice','grams':100}]}
+    c.put('/api/v1/consents',json={'diet':False})
     assert c.post('/api/v1/meals/simulate',json=payload).status_code==403
     c.put('/api/v1/consents',json={'diet':True})
     result=c.post('/api/v1/meals/simulate',json=payload).json()

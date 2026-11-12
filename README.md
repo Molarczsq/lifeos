@@ -58,14 +58,14 @@ docs/                架构、验收结果、答辩大纲与演示脚本
 ```
 
 ## 模型配置
-服务端设置 LLM_API_KEY、LLM_BASE_URL（需包含 /v1 或供应商对应前缀）、LLM_MODEL。选择支持图像输入与 json_schema 的兼容模型。密钥从不返回浏览器，不接受客户端传入模型服务器地址。
-管理员配置后，用户仍须在隐私页单独授权外部AI。未经授权不会发起外部请求。模型只获得已授权的上下文；仅发送同一授权版本内最近6轮聊天，变更授权后旧聊天不再进入上下文。工具名称与参数先校验再执行；不在白名单的模型工具调用被拒绝。输出结构通过 Pydantic 验证；失败重试一次后降级。顾问事件流输出步骤和完整最终回答，**并非逐token模型流**。
+服务端设置 LLM_API_KEY、LLM_BASE_URL（需包含 /v1 或供应商对应前缀）、LLM_MODEL。LLM_RESPONSE_FORMAT 默认 auto：官方 DeepSeek 地址使用 json_object，其他地址使用 json_schema；也可显式设置 json_object 或 json_schema。JSON 模式会将 Schema 写入提示词，所有输出仍经过服务端 Pydantic 校验，不合格时重试后降级。图片识别另需模型支持图像输入，文本模型接入成功不代表能识图。密钥从不返回浏览器，不接受客户端传入模型服务器地址。
+三个隐私选项对新账户默认开启；本版本首次启动会将现有账户的三个选项统一开启，迁移记录在 schema_migrations 中，只执行一次。用户之后手动关闭的选择会保留，不会在登录或重启时重新开启。关闭外部AI后不会发起外部请求。模型只获得已授权的上下文；仅发送同一授权版本内最近6轮聊天，变更授权后旧聊天不再进入上下文。工具名称与参数先校验再执行；不在白名单的模型工具调用被拒绝。输出结构通过 Pydantic 验证；失败重试一次后降级。顾问事件流输出步骤和完整最终回答，**并非逐token模型流**。
 协议参考：https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
 知识来源：https://www.who.int/news-room/fact-sheets/detail/healthy-diet （摘要改写，非诊疗依据）。
 
 ## 数据与安全
 - 账户密码采用带随机盐的 scrypt；数据库只存会话 token 的 SHA256，24小时有效，每次登录替换旧会话。
-- 默认无健康上下文授权；手动存储操作不等于允许将记录发给AI。
+- 饮食、健康上下文及外部 AI 默认开启，可在隐私页关闭；手动存储操作不等于允许将记录发给AI。
 - 所有用户数据查询限定 user_id；删除全部记录同时撤回授权。账户用户名和密码哈希保留用于登录；备份清理由部署者另行管理。
 - 当前模型：users、records 和 captcha_challenges。records.kind 区分 food/metric/chat/feedback/consent/mystery；不是声称已建齐需求中的全部规范化实体。
 - PostgreSQL 可先执行 migrations/001_initial.sql；应用首次启动也能建表。此次升级会在启动时幂等执行邮箱列到用户名列的迁移，并新增验证码表；对应 SQL 为 migrations/002_username_captcha.sql。旧用户 ID、密码哈希及记录保留，旧用户仍用原邮箱字符串作为登录名。禁止删库升级。

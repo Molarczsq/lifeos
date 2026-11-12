@@ -40,7 +40,7 @@ def register(s, name='new_user'):
 
 def test_registration_session_and_database_service(service):
     profile, response = register(service, 'New_User')
-    assert profile == {'username':'new_user','consents':{}}
+    assert profile == {'username':'new_user','consents':{'diet':True,'health':True,'external_ai':True}}
     token = cookie(response, auth.SESSION_COOKIE)
     account = auth.user(request('lifeos_session=' + token), service)
     assert account.username == 'new_user'
@@ -92,3 +92,23 @@ def test_database_login_cookie_rotation_and_logout_service(service):
     auth.logout(Response(), account, service)
     with pytest.raises(HTTPException):
         auth.user(request('lifeos_session=' + new_token), service)
+
+def test_default_consents_migration_runs_once():
+    from app.db import initialize_schema, default_consents
+    engine = create_engine('sqlite://')
+    Base.metadata.create_all(engine)
+    with Session(engine) as s:
+        s.add(User(id='old',username='old_user',password='hash',consents={'diet':False}))
+        s.commit()
+    initialize_schema(engine)
+    with Session(engine) as s:
+        account=s.get(User,'old')
+        assert account.consents==default_consents()
+        account.consents={'diet':False,'health':False,'external_ai':False}
+        s.commit()
+    initialize_schema(engine)
+    with Session(engine) as s:
+        assert s.get(User,'old').consents=={'diet':False,'health':False,'external_ai':False}
+        s.add(User(id='new',username='new',password='hash'))
+        s.commit()
+        assert s.get(User,'new').consents==default_consents()

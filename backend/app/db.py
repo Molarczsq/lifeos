@@ -1,9 +1,16 @@
 import os
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, String, JSON, DateTime, ForeignKey, Float, inspect, text
+from sqlalchemy import create_engine, String, JSON, DateTime, ForeignKey, Float, inspect, text, select, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
+def default_consents():
+    return {'diet': True, 'health': True, 'external_ai': True}
+
 class Base(DeclarativeBase): pass
+class SchemaMigration(Base):
+    __tablename__ = 'schema_migrations'
+    version: Mapped[str] = mapped_column(String, primary_key=True)
+
 class User(Base):
     __tablename__ = 'users'
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -11,7 +18,7 @@ class User(Base):
     password: Mapped[str] = mapped_column(String)
     token_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     token_expires: Mapped[float] = mapped_column(default=0)
-    consents: Mapped[dict] = mapped_column(JSON, default=dict)
+    consents: Mapped[dict] = mapped_column(JSON, default=default_consents)
 class CaptchaChallenge(Base):
     __tablename__ = 'captcha_challenges'
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -36,9 +43,15 @@ def db():
 def initialize_schema(target_engine):
     """Upgrade v1 accounts in place before creating new tables. Preserve user IDs/data."""
     with target_engine.begin() as conn:
+        if conn.dialect.name == 'postgresql':
+            conn.execute(text('SELECT pg_advisory_xact_lock(71031003)'))
         inspector = inspect(conn)
         if 'users' in inspector.get_table_names():
             columns = {c['name'] for c in inspector.get_columns('users')}
             if 'email' in columns and 'username' not in columns:
                 conn.execute(text('ALTER TABLE users RENAME COLUMN email TO username'))
         Base.metadata.create_all(conn)
+        version = '003_default_consents_enabled'
+        if not conn.execute(select(SchemaMigration.version).where(SchemaMigration.version == version)).scalar():
+            conn.execute(update(User).values(consents=default_consents()))
+            conn.execute(SchemaMigration.__table__.insert().values(version=version))

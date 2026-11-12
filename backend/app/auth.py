@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
-from .db import CaptchaChallenge, User, db
+from .db import CaptchaChallenge, User, db, default_consents
 from .schemas import Auth, Registration
 
 router = APIRouter(prefix='/api/v1')
@@ -101,7 +101,7 @@ def consume_captcha(body, request, s):
 @router.post('/auth/register')
 def register(body: Registration, request: Request, response: Response, s=Depends(db)):
     consume_captcha(body, request, s)
-    account = User(id=str(uuid4()), username=body.username, password=password(body.password), consents={})
+    account = User(id=str(uuid4()), username=body.username, password=password(body.password), consents=default_consents())
     s.add(account)
     try:
         s.flush()

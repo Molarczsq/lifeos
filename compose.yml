@@ -19,6 +19,7 @@ services:
       DATABASE_URL: postgresql+psycopg://lifeos:${POSTGRES_PASSWORD}@db:5432/lifeos
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_RESPONSE_FORMAT: ${LLM_RESPONSE_FORMAT:-auto}
       LLM_MODEL: ${LLM_MODEL:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
