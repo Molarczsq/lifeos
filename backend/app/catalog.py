@@ -63,7 +63,7 @@ def catalog_map(s,u):
             food['image_id']=None
     return result
 
-def create_food(body,s,u,source='manual',confidence=None):
+def create_food(body,s,u,source='manual',confidence=None,commit=True):
     if body.image_id: owned_image(s,u,body.image_id)
     name=normalized(body.name)
     existing=s.scalar(select(CatalogFood).where(CatalogFood.user_id==u.id, CatalogFood.normalized_name==name))
@@ -73,7 +73,16 @@ def create_food(body,s,u,source='manual',confidence=None):
     row=CatalogFood(id=str(uuid4()),user_id=u.id,normalized_name=name,
         data={**body.model_dump(),'source':source,'estimated':True,'confidence':confidence,
               **image_fields(body.name,body.category,body.image_id,'user-confirmed' if source=='ai' else 'user-upload'),
-              'model':os.getenv('LLM_MODEL','') if source=='ai' else None,'validation_status':'schema-validated'})
+              'model':os.getenv('LLM_MODEL','') if source in ('ai','ai-confirmed') else None,'validation_status':'schema-validated'})
+    if not commit:
+        try:
+            with s.begin_nested():
+                s.add(row);s.flush()
+        except IntegrityError:
+            row=s.scalar(select(CatalogFood).where(CatalogFood.user_id==u.id,CatalogFood.normalized_name==name))
+            if not row:raise HTTPException(409,'目录并发冲突，请重试')
+            return public_food(row),False
+        return public_food(row),True
     s.add(row)
     try: s.commit()
     except IntegrityError:

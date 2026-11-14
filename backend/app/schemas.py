@@ -54,6 +54,9 @@ class Metric(Strict):
         self.recorded_at = self.recorded_at.astimezone(timezone.utc)
         return self
 class Chat(Strict):
+    agent_version: Literal[1,2] = 1
+    plan_id: str | None = Field(default=None,max_length=64)
+    meal_id: str | None = Field(default=None,max_length=64)
     stream: bool = False
     message: str = Field(min_length=1, max_length=2000)
     conversation_id: str | None = Field(default=None, max_length=64)

@@ -25,6 +25,9 @@ app.include_router(auth_router)
 app.include_router(catalog_router)
 app.include_router(media_router)
 app.include_router(advisor_router)
+from .ai_services import router as ai_router
+from .ai_advisor import GenerativeAdvisor
+app.include_router(ai_router)
 P='/api/v1'
 limits=defaultdict(deque)
 @app.middleware('http')
@@ -50,7 +53,7 @@ def put(s,u,kind,data):
 def require(u,scope):
     if not u.consents.get(scope): raise HTTPException(403,'未授权：'+scope)
 @app.get(P+'/healthz')
-def healthz(): return {'status':'ok','ai':'configured-unverified' if os.getenv('LLM_API_KEY') else 'rules','nutrition':'demo-estimates','retrieval':'lexical'}
+def healthz(): return {'status':'ok','ai':'configured-unverified' if os.getenv('LLM_API_KEY') else 'rules','nutrition':'demo-estimates','retrieval':'bm25'}
 @app.put(P+'/consents')
 def consents(body:Consent,u=Depends(user),s=Depends(db)):
     u=s.get(User,u.id);u.consents=body.model_dump();s.commit();put(s,u,'consent',{'scopes':u.consents});return u.consents
@@ -64,10 +67,10 @@ def remove(record_id:str,u=Depends(user),s=Depends(db)):
     r=s.get(Record,record_id)
     if not r or r.user_id!=u.id: raise HTTPException(404,'记录不存在')
     s.delete(r);s.commit();return {'ok':True}
-@app.post(P+'/meals/recommend')
+@app.post(P+'/meals/recommend',deprecated=True)
 def recommend(body:MealRequest,u=Depends(user),s=Depends(db)):
     return {'meals':NutritionPlannerAgent().run(body,records(s,u,'feedback'),records(s,u,'food')[-7:] if u.consents.get('diet') else None),'mode':'rules','note':'价格为演示估计；尚未根据个人疾病或医疗目标定制'}
-@app.post(P+'/meals/mystery-box')
+@app.post(P+'/meals/mystery-box',deprecated=True)
 def mystery(body:MealRequest,u=Depends(user),s=Depends(db)):
     meals=NutritionPlannerAgent().run(body,records(s,u,'feedback'),records(s,u,'food')[-7:] if u.consents.get('diet') else None)
     past=records(s,u,'mystery')
@@ -97,14 +100,11 @@ async def import_metrics(file:UploadFile=File(...),u=Depends(user),s=Depends(db)
     for m in parsed:
         if not duplicate(existing,m): s.add(Record(id=str(uuid4()),user_id=u.id,kind='metric',data=m));existing.append(m);count+=1
     s.commit();return {'imported':count,'duplicates':len(parsed)-count}
-@app.get(P+'/health/connections')
-def connections(u=Depends(user)):
-    return [{'name':n,'status':'import-only','description':'尚未接入官方授权；请使用用户导出文件或手动录入'} for n in ['Apple HealthKit','Health Connect','微信运动','小米健康']]
 @app.post(P+'/health/insights')
 def insights(u=Depends(user),s=Depends(db)):
     require(u,'health');return HealthInsightAgent().run(records(s,u,'metric'))
 @app.get(P+'/knowledge/search')
-def knowledge(q:str='',u=Depends(user)): return {'documents':search(q[:2000]),'method':'lexical'}
+def knowledge(q:str='',u=Depends(user)): return {'documents':search(q[:2000]),'method':'bm25'}
 @app.get(P+'/advisor/sessions')
 def sessions(u=Depends(user),s=Depends(db)): return records(s,u,'chat')
 class AdvisorOrchestrator:
@@ -183,6 +183,11 @@ async def chat(body:Chat,request:Request,u=Depends(user),s=Depends(db)):
     if body.image_id:
         require(u,'external_ai')
         owned_image(s,u,body.image_id)
+    from .ai_services import owned, revision
+    for rid,kind in [(body.plan_id,'plan'),(body.meal_id,'food')]:
+        if rid:
+            require(u,'diet');selected=owned(s,u,rid,kind)
+            if kind=='plan' and selected.data.get('revision')!=revision(s,u):raise HTTPException(409,'授权已变更，请重新规划')
     conversation=resolve_conversation(s,u,body.conversation_id,body.message)
     body=body.model_copy(update={'conversation_id':conversation.id})
     if body.regenerate_id:
@@ -194,7 +199,7 @@ async def chat(body:Chat,request:Request,u=Depends(user),s=Depends(db)):
             require(u,'external_ai');owned_image(s,u,body.image_id)
     async def events():
         yield 'data: '+json.dumps({'type':'session','id':conversation.id})+'\n\n'
-        async for event in AdvisorOrchestrator().run(body,u,s,request):
+        async for event in (GenerativeAdvisor() if body.agent_version==2 else AdvisorOrchestrator()).run(body,u,s,request):
             yield 'data: '+json.dumps(event,ensure_ascii=False)+'\n\n'
         yield 'data: '+json.dumps({'type':'done'})+'\n\n'
     return StreamingResponse(events(),media_type='text/event-stream',headers={'X-Accel-Buffering':'no'})

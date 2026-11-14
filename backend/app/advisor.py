@@ -67,4 +67,14 @@ def suggestions(page:str='',conversation_id:str|None=None,u=Depends(user),s=Depe
         owned_conversation(s,u,conversation_id)
         if any(r.data.get('conversation_id')==conversation_id for r in s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='chat'))):
             questions.append('请把刚才的建议整理成一个可执行的小步骤。')
-    return {'questions':questions[:5],'mode':'context-rules'}
+    mode='context-rules'
+    if u.consents.get('diet') and u.consents.get('external_ai'):
+        from .ai_services import revision
+        latest=s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='ai-insight').order_by(Record.created_at.desc())).first()
+        if latest and latest.data.get('revision')==revision(s,u):
+            questions=latest.data.get('questions',[])+questions;mode='ai-and-context'
+    return {'questions':list(dict.fromkeys(questions))[:5],'mode':mode}
+
+@router.post('/quick')
+def quick(u=Depends(user),s=Depends(db)):
+    return public(resolve_conversation(s,u,None))

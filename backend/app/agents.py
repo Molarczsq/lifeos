@@ -11,13 +11,7 @@ FOODS = {
  'oats': {'name':'燕麦','kcal':389,'protein':16.9,'fat':6.9,'carbs':66.3},
 }
 SOURCE = {'label':'演示营养估计种子 / 每100g；非实测数据','reference':'https://fdc.nal.usda.gov/','verified':False}
-KNOWLEDGE = [
- {'id':'who-diversity','title':'饮食多样性','text':'均衡与多样性是健康饮食的基础，可选择不同种类的蔬菜、全谷物和豆类。','url':'https://www.who.int/news-room/fact-sheets/detail/healthy-diet','tags':'饮食 下一餐 蔬菜 营养 推荐 多样'},
- {'id':'who-balance','title':'饮食需要因人而异','text':'饮食结构取决于个人特点、活动水平和当地可获得的食物，不能仅凭步数决定下一餐。','url':'https://www.who.int/news-room/fact-sheets/detail/healthy-diet','tags':'运动 步数 热量 健康 预算'},
-]
-def search(q):
-    def score(d): return sum(1 for c in set(q) if c in d['tags']+d['text'])
-    return [d for d in sorted(KNOWLEDGE,key=score,reverse=True) if score(d)>0][:2]
+from .knowledge import DOCUMENTS as KNOWLEDGE, search
 def nutrition(items):
     totals = dict.fromkeys(['kcal','protein','fat','carbs'],0.)
     for i in items:

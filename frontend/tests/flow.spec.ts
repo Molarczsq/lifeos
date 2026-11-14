@@ -25,23 +25,23 @@ test('mobile registration → meal → advisor → cookie restore → login data
   const username = 'e2e_' + Date.now();
   await page.goto('/');
   await expect(page.getByRole('navigation')).toHaveCount(0);
-  await expect(page.getByRole('button', {name:'记录一餐',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button', {name:'AI识餐',exact:true})).toHaveCount(0);
   await expect(page.getByLabel('邮箱', {exact:true})).toHaveCount(0);
   await register(page, username);
   const session = (await page.context().cookies()).find(c => c.name === 'lifeos_session');
   expect(session?.httpOnly).toBe(true);
   expect(session?.sameSite).toBe('Strict');
-  await page.getByRole('button', {name:'记录我的一餐'}).click();
+  await page.getByRole('button', {name:'AI识餐',exact:true}).click();
   await page.getByLabel('克数', {exact:true}).fill('180');
   await page.getByRole('button', {name:'确认并保存记录'}).click();
   await expect(page.getByRole('status').filter({hasText:'已保存到你的饮食记录'})).toBeVisible();
-  await page.getByRole('button', {name:'下一餐灵感',exact:true}).click();
-  await page.getByRole('button', {name:'生成下一餐建议'}).click();
-  await expect(page.getByRole('heading', {name:'青蔬鸡肉糙米碗'})).toBeVisible();
+  await page.getByRole('button', {name:'AI饮食规划',exact:true}).click();
+  await page.getByRole('button', {name:'生成下一餐',exact:true}).click();
+  await expect(page.getByRole('alert').filter({hasText:'模型'}).last()).toBeVisible();
   await page.getByRole('button', {name:'打开AI顾问'}).click();
   await page.getByLabel('顾问问题').fill('下一餐蔬菜怎么选');
   await page.getByRole('button', {name:'发送问题'}).click();
-  await expect(page.getByText('模式：rules')).toBeVisible();
+  await expect(page.getByText('模式：unavailable')).toBeVisible();
   await page.getByRole('button', {name:'关闭顾问'}).click();
   await page.reload();
   await expect(page.getByRole('navigation', {name:'主导航'})).toBeVisible();
@@ -129,7 +129,7 @@ test('privacy save failure restores the previous choice', async ({page}) => {
 test('dynamic food persists and full advisor keeps conversations isolated', async ({page}) => {
   await page.goto('/');
   await register(page,'catalog_'+Date.now());
-  await page.getByRole('button',{name:'食物目录',exact:true}).click();
+  await page.getByRole('button',{name:'AI食物知识库',exact:true}).click();
   const food='测试蔬菜汤'+Date.now();
   await page.getByRole('button',{name:'添加食物',exact:true}).click();
   await page.getByRole('button',{name:'完全手动录入',exact:false}).click();
@@ -199,7 +199,7 @@ for(const width of [375,768,1024,1440]){
  test('shared shell and catalog at '+width+'px',async({page})=>{
   await page.setViewportSize({width,height:900});
   await page.goto('/');await register(page,'design_'+width+'_'+Date.now());
-  await page.getByRole('button',{name:'食物目录',exact:true}).click();
+  await page.getByRole('button',{name:'AI食物知识库',exact:true}).click();
   await expect(page.locator('.catalog-tile')).toHaveCount(6);
   await expect(page.getByLabel('食物名称',{exact:true})).toHaveCount(0);
   const image=page.locator('.catalog-cover img').first();
@@ -230,7 +230,7 @@ for(const width of [375,768,1024,1440]){
   expect(composer!.y+composer!.height).toBeLessThan(900-(width<=760?69:0));
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   await page.screenshot({path:'test-results/advisor-'+width+'.png',fullPage:true});
-  await page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'记录一餐'}).click();
+  await page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'AI识餐'}).click();
   await expect(page.getByRole('heading',{name:'拍一张，认识这一餐'})).toBeVisible();
  });
 }
@@ -245,4 +245,42 @@ test('advisor retries a transient session error without showing registration',as
  await expect(page.getByRole('form',{name:'账户注册'})).toHaveCount(0);
  fail=false;await page.getByRole('button',{name:'重试恢复会话'}).click();
  await expect(page.getByRole('heading',{name:'今天，想从哪里开始？'})).toBeVisible();
+});
+
+test('knowledge retrieval, profile skip and unavailable AI are explicit',async({page})=>{
+ await page.goto('/');await register(page,'ai_flow_'+Date.now());
+ await page.getByRole('button',{name:'AI食物知识库',exact:true}).click();
+ await page.getByLabel('知识检索问题').fill('全谷物 燕麦 主食');
+ await page.getByRole('button',{name:'检索知识',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'全谷物与主食搭配'})).toBeVisible();
+ await expect(page.getByRole('link',{name:'查看来源 ↗'}).first()).toHaveAttribute('href',/who.int/);
+ await page.getByRole('link',{name:'带着问题问问智膳 ↗'}).click();
+ await expect(page.getByLabel('输入问题',{exact:true})).toHaveValue('全谷物 燕麦 主食');
+ await page.getByRole('button',{name:'饮食建档',exact:true}).click();
+ await page.getByRole('button',{name:'跳过',exact:true}).click();
+ await expect(page.getByRole('button',{name:'确认保存',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'关闭弹窗'}).click();
+ await page.getByRole('button',{name:'发送',exact:true}).click();
+ await expect(page.getByRole('button',{name:'复制消息',exact:true})).toBeVisible();
+ await expect(page.getByText(/AI当前不可用/)).toBeVisible();
+});
+
+test('voice transcript remains editable and is not sent automatically',async({page})=>{
+ // Test-only browser API double; this does not validate microphone hardware/service.
+ await page.addInitScript(()=>{
+  class Recognition {
+   lang='';interimResults=false;onresult:((e:unknown)=>void)|null=null;onend:(()=>void)|null=null;
+   start(){setTimeout(()=>{this.onresult?.({resultIndex:0,results:[[{transcript:'今晚想吃蔬菜汤'}]]});this.onend?.()},30)}
+   stop(){this.onend?.()}abort(){}
+  }
+  Object.defineProperty(window,'SpeechRecognition',{value:Recognition,configurable:true});
+ });
+ await page.goto('/');await register(page,'voice_'+Date.now());
+ await page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'问问智膳'}).click();
+ page.once('dialog',d=>d.accept());
+ await page.getByRole('button',{name:'语音输入',exact:true}).click();
+ await expect(page.getByLabel('输入问题',{exact:true})).toHaveValue('今晚想吃蔬菜汤');
+ await expect(page.getByRole('button',{name:'复制消息',exact:true})).toHaveCount(0);
+ await page.getByLabel('输入问题',{exact:true}).fill('今晚想吃面');
+ await expect(page.getByLabel('输入问题',{exact:true})).toHaveValue('今晚想吃面');
 });

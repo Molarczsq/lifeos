@@ -21,6 +21,8 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_RESPONSE_FORMAT: ${LLM_RESPONSE_FORMAT:-auto}
       LLM_MODEL: ${LLM_MODEL:-}
+      LLM_INPUT_USD_PER_MILLION: ${LLM_INPUT_USD_PER_MILLION:-}
+      LLM_OUTPUT_USD_PER_MILLION: ${LLM_OUTPUT_USD_PER_MILLION:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
     depends_on:

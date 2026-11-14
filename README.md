@@ -1,5 +1,5 @@
 # 智膳 LifeOS
-可运行的中文健康管理 MVP：Next.js + FastAPI + SQLAlchemy。**当前不是全部挑战赛需求的最终版本。** 无密钥使用透明规则模式，真实 DeepSeek 文本 SSE 已用不含个人数据的问题验证；视觉能力需使用支持图片的模型另行验证。
+以饮食为核心的生成式 AI 智能体：Next.js + FastAPI + SQLAlchemy。支持多模态识餐、对话建档、生成式餐食规划、Function Calling、BM25 知识检索和确认后写入。无密钥时可手动记录、管理目录和检索知识；AI 生成明确显示不可用，不用固定食谱冒充。视觉能力需使用支持图片的模型。
 
 ## 快速启动
 需要 Docker Engine / Docker Compose：
@@ -31,14 +31,14 @@ pnpm dev
 
 ## 本次增量功能
 - 动态私人食物目录：可搜索、新增、编辑、删除；名称规范化去重；上传图片经校验和压缩后存入数据库，按内容去重。六种原基础食物继续作为只读演示种子。
-- AI 食物识别：支持目录外的新名称、类别、主要食材、每100g营养估计、估计份量。Schema 验证后写入用户目录，前端立即刷新；重复图片复用识别记录。信息不足时询问补充，不编造必然识别结果。
+- AI 食物识别：支持目录外的新名称、类别、主要食材、每100g营养估计、估计份量。Schema 验证后显示草稿，用户确认才写入目录并刷新；重复图片复用识别记录。信息不足时询问补充，不编造必然识别结果。
 - `/advisor` 独立对话中心：会话搜索、创建、重命名、删除、Markdown/代码块、复制消息、多轮历史、图片问答、停止生成、失败重试和重新生成；移动端历史抽屉及安全区域输入栏。
 - 模型原生 SSE：向兼容模型发送 stream=true，逐步展示 JSON text 字段的草稿；草稿是待校验内容，完整 Schema 和安全检查后才保存最终回答。连接失败会清除草稿并明确降级；停止请求不保存未完成回答。快捷悬浮窗保留原事件流，并可携带会话 ID 打开完整中心。
-- 问题建议根据页面、已授权的当天饮食、运动记录及会话是否有历史，通过透明规则生成，不宣称预测用户意图。
+- 主动摘要生成后，其 AI 问题建议优先用于聊天；没有摘要时用透明上下文规则提供快捷问题，不宣称预测意图。
 - 前端隐私页已删除数据源连接与 AI 供应商配置区块，保留三个隐私开关、导出和删除数据。
 
 ### 能力边界
-AI 适配器、Function Calling、图片输入和 SSE 已实现；未将模拟测试称为真实模型成功。部署时仍须用自己的供应商和支持对应功能的模型验证。文字模型不一定支持图片。营养、份量均为估计；基础食物与三款推荐餐仍是演示种子。RAG 仍为两个 WHO 摘要的词项检索，不是向量数据库。多智能体使用确定性编排，未引入 LangGraph。设备健康连接仍只支持文件导入和手动录入。规则安全检查不是医学诊断或完备风险检测。
+AI 适配器、Function Calling、图片输入和 SSE 已实现；未将模拟测试称为真实模型成功。部署时仍须用自己的供应商和支持对应功能的模型验证。文字模型不一定支持图片。营养、份量均为估计；基础食物为示例种子。新规划使用模型生成，旧三款规则食谱仅保留在标记 deprecated 的兼容 API。RAG 使用六条有来源、版本和适用范围的 WHO 摘要进行中文 BM25 检索，不是向量数据库。Agent 使用至多两轮的有界工具编排，未引入 LangGraph。身体指标 API 为已授权 AI 上下文和历史数据兼容保留，独立身体仪表盘及平台连接目录已删除。规则安全检查不是医学诊断或完备风险检测。
 
 ## 目录
 ```text
@@ -117,13 +117,13 @@ Sites托管使用Cloudflare Workers，不直接支持本项目的FastAPI进程�
 
 ## 页面与 API
 
-页面：`/` 健康驾驶舱（含动态食物目录、记录、趋势和隐私），`/advisor` 独立对话中心。所有私人 API 均要求现有 HttpOnly 会话 Cookie；未登录进入中心显示注册/登录面板。
+页面：`/` AI健康驾驶舱（含识餐、规划、盲盒、知识库及必要的历史和隐私），`/advisor` 独立对话中心。所有私人 API 均要求现有 HttpOnly 会话 Cookie；未登录进入中心显示注册/登录面板。
 
 |API|用途|
 |---|---|
 |GET/POST `/api/v1/food/catalog`|搜索（q）、新增目录；创建返回 created，重名复用|
 |PUT/DELETE `/api/v1/food/catalog/{id}`|编辑或删除用户自建条目；冲突409、无权限或不存在404|
-|POST `/api/v1/food/analyze`|图片识别、验证并自动入库；需要 external_ai|
+|POST `/api/v1/food/analyze`|前端使用 ?preview=true 取得图片草稿，确认后入库；需要 external_ai；旧无preview协议保持兼容|
 |POST `/api/v1/media`|上传 JPEG/PNG/WebP，最多5MB及2000万像素；解码、去EXIF、压缩至1200px|
 |GET/DELETE `/api/v1/media/{id}`|私有图片读取/删除；删除后目录回到占位图|
 |GET/POST `/api/v1/advisor/conversations`|搜索标题、新建会话|
@@ -134,7 +134,7 @@ Sites托管使用Cloudflare Workers，不直接支持本项目的FastAPI进程�
 
 SSE 事件：session、step、draft（临时完整文本快照）、answer（最终结果）、done。客户端终止用 AbortController；断线不盲目重发，应先读取历史再重试，避免已保存回答重复生成。重新生成原子替换所选回答；后续历史应通过新会话分支处理，目前 UI 仅允许重新生成最后一轮。
 
-图片不接受外部 URL，不进行服务端 URL 抓取。图片权限与目录、会话相同，按用户隔离。创建食物必须填写每100g的营养数据；AI 给出的内部置信度、模型来源和验证状态留在数据库，不作为用户可见的准确率承诺。占位图为本地 emoji/CSS，明确标识，不使用未经授权网络图片。
+图片不接受外部 URL，不进行服务端 URL 抓取。图片权限与目录、会话相同，按用户隔离。创建食物必须填写每100g的营养数据；AI 给出的内部置信度、模型来源和验证状态留在数据库，不作为用户可见的准确率承诺。占位图为本地分类 SVG，标记“非实拍”，不使用未经授权网络图片。
 
 数据库迁移见 [004说明](backend/migrations/004_catalog_media_conversations.md)。账户和历史数据保留；`/data/export` 包含目录、会话和记录，原始图片二进制可通过私有媒体API读取；`DELETE /data` 同时清除新目录、会话与压缩图片。
 
@@ -152,7 +152,7 @@ pnpm exec playwright install --with-deps webkit
 # 另一个终端：cd backend && DATABASE_URL=sqlite:////tmp/lifeos-e2e.db python -m tests.e2e_server
 CI=1 pnpm test:e2e
 ```
-`tests/e2e_server.py` 仅固定测试验证码，不模拟供应商。后端供应商契约测试使用明确的 MockTransport / monkeypatch，无需真实密钥。E2E 不设置模型密钥，验证规则路径、UI、Cookie、目录和会话数据链路。真实供应商、视觉准确率、真实调用延迟不在这些测试结论内。
+`tests/e2e_server.py` 仅固定测试验证码，不模拟供应商。后端供应商契约测试使用明确的 MockTransport / monkeypatch，无需真实密钥。E2E 不设置模型密钥，验证明确的模型不可用路径、UI、Cookie、目录和会话数据链路。真实供应商、视觉准确率、真实调用延迟不在这些测试结论内。
 
 ## 统一设计系统与图鉴更新
 
@@ -163,3 +163,46 @@ CI=1 pnpm test:e2e
 新增接口：`POST /api/v1/food/catalog/suggest`、`POST /api/v1/food/analyze?preview=true`、`POST /api/v1/food/images/repair`、`GET /api/v1/food/images/jobs`。使用既有Cookie认证。图片字段扩展已有JSON，不需要删除数据库或重建数据卷。环境变量沿用现有LLM配置。
 
 组件结构、图片来源规则、兼容说明和测试方式见 [统一设计说明](docs/DESIGN_SYSTEM.md)。
+
+
+## 生成式饮食智能体（v3）
+
+六条主导航共用原 AppShell：`/?tab=overview`、`scan`、`plan`、`box`、`catalog` 和 `/advisor`。隐私与历史在页头保留入口。没有新建第二套品牌或前端密钥配置。
+
+- **对话建档**：顾问内“饮食建档”一次询问必要信息，可跳过；结构化饮食偏好经确认保存，自动用于已授权的下一餐规划。活动信息另受身体上下文授权控制，不强制收集身体指标。
+- **生成式规划与盲盒**：预算、现有食材、忌口和自然语言追问进入真实模型；支持均衡、惊喜、高蛋白、蔬菜优先、低预算、冰箱食材模式。服务端校验预算和已知过敏原别名，按每100g营养确定性计算合计。无法保证隐藏过敏原或交叉接触安全。
+- **聊天中的行动**：七个有参数工具：`add_meal`、`get_food_nutrition`、`get_day_structure`、`retrieve_knowledge`、`safety_screen`、`navigate_to_page`、`plan_recipe`。模型实际选择工具；未知 ID 先查目录，最多两轮。菜谱可在聊天内生成或通过“聊菜谱”调整。所有保存先显示确认卡片，站内导航需用户点击。
+- **主动建议**：进入驾驶舱/规划或保存一餐后生成有依据的摘要；30秒冷却、相同授权与数据30分钟缓存，无记录显示引导。AI 建议不会把漏记推断成未进食。
+- **知识库**：自然语言 BM25 检索与私人食物目录并列；名称 AI 草稿、图片草稿、人工修正、私有图片访问和原图片补全流程保留。
+- **语音**：浏览器 SpeechRecognition 开始/停止、授权提示、文字编辑；不自动发送，不支持时保留打字。浏览器服务可能处理录音，未声称本地离线识别。
+
+### AI Gateway 与数据流
+
+`llm.py` 负责模型适配、Schema、重试、SSE 和用量采集；`ai_services.py` 负责偏好/规划/摘要/确认事务；`agent_tools.py` 定义工具注册表；`ai_advisor.py` 执行有界编排；`knowledge.py` 负责 BM25；`agents.py` 复用输入分流和输出审查。工具参数、用户权限、授权版本分别验证。
+
+请求 → 安全与授权检查 → 模型选择工具 → 真实查询/知识检索 → 结构化生成 → 约束校验 → 展示草稿与来源 → 用户确认 → 数据库写入 → 更新上下文。
+
+### 新 API（均需 HttpOnly 会话）
+
+|接口|用途|
+|---|---|
+|GET `/api/v1/ai/preferences`|读取本人的偏好|
+|POST `/api/v1/ai/profile/turn`|建档提取或跳过，不直接保存|
+|POST `/api/v1/ai/plans`|生成/追问规划；`previous_id` 读取本人且授权版本相同的方案|
+|GET `/api/v1/ai/actions/{id}`|查看本人确认动作|
+|POST `/api/v1/ai/actions/{id}/confirm` 或 `/cancel`|幂等确认/取消，过期或授权变化返回409|
+|GET `/api/v1/ai/context`|已授权今日饮食卡片，日期边界明确为UTC|
+|POST `/api/v1/ai/insights`|有冷却和缓存的主动建议|
+|GET `/api/v1/ai/usage`|本人已报告Token与估计成本；未知用量单独计数|
+|POST `/api/v1/advisor/quick`|取得本人的快捷会话|
+|POST `/api/v1/advisor/chat/stream`|新客户端使用 `agent_version:2`；旧协议保留兼容|
+
+403表示缺少授权，404用于不存在或他人记录，409表示过期/授权变化，422表示参数或生成结果约束失败，503表示模型不可用。完整请求结构见 FastAPI `/docs`。
+
+### 环境变量与迁移
+
+继续使用服务端 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_RESPONSE_FORMAT`。可选 `LLM_INPUT_USD_PER_MILLION`、`LLM_OUTPUT_USD_PER_MILLION` 由部署者填写计价；未填时成本为未知。供应商未报告的流式Token也标记未知，不能当零成本；价格估计不是供应商账单。这里只统计新建档、规划、摘要及 v2 顾问调用。
+
+新增记录复用现有 `records`：`preferences`、`plan`、`action`、`ai-insight`、`ai-usage`；无需删表、重建库或导入附件localStorage。动作有效1小时，按用户隔离，并绑定授权版本。Docker按原启动方式更新，已有卷须保留。附件移植与删除决策见 [AI迁移审计](docs/AI_MIGRATION.md)。
+
+技术亮点是可验证的工具调用、可解释检索、确认后写入、生成式约束规划和授权版本隔离，而非堆叠Agent名称。商业上可围绕饮食规划订阅探索，当前无收费或医疗服务功能。
