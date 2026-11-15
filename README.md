@@ -212,11 +212,11 @@ CI=1 pnpm test:e2e
 公共背景仅使用本次用户明确提供的七张饮食图片；来源记录为“用户提供，用于本项目公共背景”，不宣称第三方开放许可。用户账户上传的餐食图片永远不会自动进入此资源池。
 
 - `BackgroundProvider` 统一选图，`RandomBackground` 管理加载与切换，`BackgroundOverlay` 提供遮罩；所有页面仍复用原 AppShell、Sidebar 和 Header。
-- 欢迎/登录、驾驶舱、饮食规划、盲盒和顾问空状态启用。聊天消息、识别结果、表单和目录卡片保留不透明底色。
+- 所有 AppShell 页面启用，包括识餐、目录、历史、设置和完整顾问。公共卡片使用半透明底色；聊天消息、识别结果和表单使用更高不透明度的阅读层。
 - `frontend/lib/background-pool.json` 记录来源、主题、尺寸和启用状态。页面内保持稳定，切换页面避免连续重复；sessionStorage 只保存装饰图片 ID，不含健康信息。
 - SSR 先显示品牌渐变，客户端挂载后选择图片，避免随机 hydration 不一致。当前图 eager/high priority 加载，不预先下载整个图片池；失败回退品牌渐变。
-- `backgroundConfig.autoRotateMs` 默认 0（关闭），启用时最低间隔10秒，650ms淡入淡出；减少动态效果偏好关闭自动轮换及动画。浅色/深色遮罩位于 `globals.css` 的 `.background-overlay`，浅色约84%、深色约82%，边缘渐变提高可读性。
-- 生成桌面和手机 WebP 变体，不放大原图。宽度不足1000px的原图不用于桌面，显示尺寸亦不超过资源原生尺寸。手机约13–79KB/张，桌面可用资源约116–230KB/张；切换只按需加载下一张。
+- `backgroundConfig.autoRotateMs` 默认 0（关闭），启用时最低间隔10秒，650ms淡入淡出；减少动态效果偏好关闭自动轮换及动画。浅色/深色遮罩位于 `app/glass.css` 的 `.background-overlay`，浅色18–28%、深色42–58%；不再叠加径向透明蒙版。
+- 生成桌面和手机 WebP 变体，资源生成时不放大原图。宽度不足1000px的原图不用于桌面；显示时按 cover 等比例铺满视口，允许裁切和缩放，超大屏原图清晰度仍受资源分辨率限制。手机约13–79KB/张，桌面可用资源约116–230KB/张；切换只按需加载下一张。
 - 文件名含内容哈希，`next.config.ts` 为 `/backgrounds/` 设置一年 immutable 缓存。替换图片必须重新生成文件名，不能覆盖同名资源。
 
 添加公共资源：确认图片适用于公开展示后，修改 `frontend/scripts/generate-backgrounds.mjs` 中的明确文件列表，运行：
@@ -238,4 +238,17 @@ E2E 覆盖背景加载、缓存、页面内稳定、切页去重、图片故障�
 
 域名、DNS、HTTPS、Cookie 与 VPS 更新说明见 [VPS部署记录](docs/VPS_DEPLOYMENT.md)。
 
-本次本机验收：`python -m pytest -q` 86通过；`tsc --noEmit`、`eslint .`、`next build`通过；生产构建 WebKit E2E 15通过。Chromium 12次采样无水平溢出，每页至多1个背景请求；375px LCP中位数禁用/启用476/448ms，1440px为288/280ms，最大CLS分别约0.00200/0.00035。这些差异在小样本噪声范围内，不能据此宣称背景提升性能。初次测试发现目录图片断言未等待加载，已改为等待解码完成；一次本地重建干扰了正在运行的测试，分开构建与测试后全套通过。
+v4.0背景初版本机验收：`python -m pytest -q` 86通过；`tsc --noEmit`、`eslint .`、`next build`通过；生产构建 WebKit E2E 15通过。Chromium 12次采样无水平溢出，每页至多1个背景请求；375px LCP中位数禁用/启用476/448ms，1440px为288/280ms，最大CLS分别约0.00200/0.00035。这些差异在小样本噪声范围内，不能据此宣称背景提升性能。初次测试发现目录图片断言未等待加载，已改为等待解码完成；一次本地重建干扰了正在运行的测试，分开构建与测试后全套通过。
+
+
+### v4.1 全屏背景与轻量玻璃样式
+
+背景移到 AppShell 的直接子层，根容器 `isolation:isolate` 与背景 `z-index:-1` 隔离层叠，覆盖导航与正文后方。固定 `inset:0`、`100vw`、`100dvh`（`100vh`兜底），图片 `object-fit:cover` / 居中裁切，不变形；滚动不移动，`pointer-events:none` 不截获点击。html/body 保留渐变的基础底色，AppShell、workspace、main 去除遮挡背景的实色层。
+
+公共 `frontend/app/glass.css` 统一样式：桌面卡片72%、侧栏80%、页头76%、弹窗94%、输入框90%，消息与数据阅读层92%；统一8px blur及WebKit前缀。手机卡片84%，导航/页头也提高不透明度。深色模式单独设置底色和文字。无 backdrop-filter 支持时公共卡片/导航回退实色。未对内容容器使用整体 opacity；图片淡入仍仅影响装饰图。
+
+标题与页脚加局部阅读底色，避免文字直接压在随机照片上；辅助文字、链接、输入框边界及焦点统一使用高对比度颜色。对比度测试在纯黑/纯白极端图像底色上合成半透明表面，检查主要文字/主按钮≥4.5:1、输入框边界≥3:1，参照 [WCAG文字对比度](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) 和 [非文字对比度](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)。这些检查覆盖公共色彩组合，不等同于全站全部无障碍条款认证。
+
+新增回归检查375、768、1024、1440px的全屏几何、图片等比例cover、滚动固定、透明度、深浅色、输入可用性及对比度；继续运行原有注册、饮食、目录、聊天、隐私及背景故障回退测试。运行命令仍为 `pnpm typecheck && pnpm lint && pnpm build && pnpm test:e2e`，后端运行 `python -m pytest -q`。本次无数据库/API/环境变量变更。
+
+v4.1本机结果：TypeScript、ESLint、Next.js生产构建均通过；后端86项通过，WebKit E2E 19项通过（包含四种宽度、双主题、极端底色对比度）。Chromium检查了桌面/手机驾驶舱及顾问截图。测试使用隔离的本地规则模式后端，不把这些回归结果描述为本次重新验证了生产模型服务。
