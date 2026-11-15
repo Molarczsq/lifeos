@@ -12,9 +12,10 @@ from .auth import router as auth_router, user
 from .catalog import router as catalog_router, catalog_map, estimate
 from .media import router as media_router, owned_image, image_url
 from .advisor import router as advisor_router, resolve_conversation
-from .schemas import Auth, Consent, Food, MealRequest, Metric, Chat, Answer, Feedback
+from .schemas import Auth, Consent, Food, MealRequest, Metric, Chat, Answer, Feedback, RecipeRequest
 from .agents import FOODS, SOURCE, nutrition, search, safety, review_answer, NutritionPlannerAgent, HealthInsightAgent
 from .llm import OpenAICompatibleProvider, FoodVisionAgent, ProviderUnavailable, plan_tools, stream_answer
+from .recipes import recommend as recommend_recipes
 
 @asynccontextmanager
 async def lifespan(app):
@@ -77,6 +78,11 @@ def mystery(body:MealRequest,u=Depends(user),s=Depends(db)):
     if len(meals)>1 and past and meals[0]['id']==past[-1]['meal_id']: meals=meals[1:]+meals[:1]
     if meals: put(s,u,'mystery',{'meal_id':meals[0]['id']})
     return {'meal':meals[0] if meals else None,'mode':'rules'}
+@app.post(P+'/recipes/recommend')
+async def recipe_recommend(body:RecipeRequest,u=Depends(user),s=Depends(db)):
+    live=bool(u.consents.get('external_ai') and os.getenv('LLM_API_KEY'))
+    names=[v['name'] for v in catalog_map(s,u).values()]
+    return await recommend_recipes(body,names,live)
 @app.post(P+'/meals/feedback')
 def feedback(body:Feedback,u=Depends(user),s=Depends(db)): return put(s,u,'feedback',body.model_dump())
 @app.get(P+'/health/metrics')

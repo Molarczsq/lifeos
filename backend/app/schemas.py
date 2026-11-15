@@ -105,3 +105,23 @@ class ConversationInput(Strict):
 
 class FoodNameRequest(Strict):
     name: str = Field(min_length=1, max_length=80)
+
+class RecipeRequest(Strict):
+    ingredients: list[str] = Field(default_factory=list, max_length=20)
+    flavor: Literal['any','light','savory','spicy'] = 'any'
+    max_minutes: int = Field(default=30, ge=5, le=120)
+    allergens: list[str] = Field(default_factory=list, max_length=20)
+    servings: int = Field(default=1, ge=1, le=6)
+
+class RecipeStep(Strict):
+    title: str = Field(min_length=1, max_length=60)
+    detail: str = Field(min_length=1, max_length=400)
+    heat: str = Field(default='', max_length=120)
+
+class RecipeAnswer(Strict):
+    name: str = Field(min_length=1, max_length=80)
+    minutes: int = Field(ge=1, le=180)
+    ingredients_text: str = Field(min_length=1, max_length=600)
+    steps: list[RecipeStep] = Field(min_length=2, max_length=12)
+    heat_tips: str = Field(default='', max_length=400)
+    note: str = Field(default='', max_length=400)

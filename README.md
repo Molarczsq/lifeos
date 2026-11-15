@@ -206,3 +206,7 @@ CI=1 pnpm test:e2e
 新增记录复用现有 `records`：`preferences`、`plan`、`action`、`ai-insight`、`ai-usage`；无需删表、重建库或导入附件localStorage。动作有效1小时，按用户隔离，并绑定授权版本。Docker按原启动方式更新，已有卷须保留。附件移植与删除决策见 [AI迁移审计](docs/AI_MIGRATION.md)。
 
 技术亮点是可验证的工具调用、可解释检索、确认后写入、生成式约束规划和授权版本隔离，而非堆叠Agent名称。商业上可围绕饮食规划订阅探索，当前无收费或医疗服务功能。
+
+### 可选补充：无密钥的分步菜谱降级
+
+`POST /api/v1/recipes/recommend` 与侧栏「怎么做菜」为本分支新增，提供按食材 / 口味 / 时间 / 忌口筛选的分步做法。无 `LLM_API_KEY` 或模型不可用时降级到 6 道内置本地菜谱库；配置密钥且授权外部 AI 时首选做法由模型生成并经 JSON Schema 与安全复核。每条结果标注 `source`（`live-model` / `local-library` / `fallback`），不把规则结果称为 AI 生成。这是模型不可用时的降级路径，不替代上文的生成式 `Recipe` 与确认动作，也不改动 deprecated 兼容路由。边界与验证范围见 [无密钥菜谱降级说明](docs/RECIPES_FALLBACK.md)。
