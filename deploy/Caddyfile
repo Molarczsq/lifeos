@@ -1,0 +1,8 @@
+yeta-lifeos.xyz {
+    encode zstd gzip
+    reverse_proxy frontend:3000
+}
+
+www.yeta-lifeos.xyz {
+    redir https://yeta-lifeos.xyz{uri} permanent
+}

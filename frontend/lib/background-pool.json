@@ -1,0 +1,156 @@
+[
+  {
+    "id": "protein",
+    "theme": "蛋白质食材",
+    "enabled": true,
+    "source": "用户提供，用于本项目公共背景",
+    "originalName": "00.webp",
+    "originalWidth": 626,
+    "originalHeight": 417,
+    "desktopEligible": false,
+    "desktop": {
+      "src": "/backgrounds/protein-desktop-e1f0a2f09c.webp",
+      "width": 626,
+      "height": 417,
+      "bytes": 46438
+    },
+    "mobile": {
+      "src": "/backgrounds/protein-mobile-ebb96a60ee.webp",
+      "width": 312,
+      "height": 416,
+      "bytes": 20732
+    }
+  },
+  {
+    "id": "balance",
+    "theme": "多样食材",
+    "enabled": true,
+    "source": "用户提供，用于本项目公共背景",
+    "originalName": "292.jpeg",
+    "originalWidth": 1000,
+    "originalHeight": 731,
+    "desktopEligible": true,
+    "desktop": {
+      "src": "/backgrounds/balance-desktop-bdf93a5110.webp",
+      "width": 1000,
+      "height": 731,
+      "bytes": 182466
+    },
+    "mobile": {
+      "src": "/backgrounds/balance-mobile-74e7097a79.webp",
+      "width": 480,
+      "height": 640,
+      "bytes": 78952
+    }
+  },
+  {
+    "id": "table",
+    "theme": "餐桌",
+    "enabled": true,
+    "source": "用户提供，用于本项目公共背景",
+    "originalName": "575b351c941e468b9512b3f2a438f813.jpeg",
+    "originalWidth": 1080,
+    "originalHeight": 721,
+    "desktopEligible": true,
+    "desktop": {
+      "src": "/backgrounds/table-desktop-2bfc31dd86.webp",
+      "width": 1080,
+      "height": 721,
+      "bytes": 154952
+    },
+    "mobile": {
+      "src": "/backgrounds/table-mobile-75b68167ad.webp",
+      "width": 480,
+      "height": 640,
+      "bytes": 62316
+    }
+  },
+  {
+    "id": "produce",
+    "theme": "蔬果",
+    "enabled": true,
+    "source": "用户提供，用于本项目公共背景",
+    "originalName": "4795317-PH.jpg",
+    "originalWidth": 800,
+    "originalHeight": 451,
+    "desktopEligible": false,
+    "desktop": {
+      "src": "/backgrounds/produce-desktop-d93427df66.webp",
+      "width": 800,
+      "height": 451,
+      "bytes": 35958
+    },
+    "mobile": {
+      "src": "/backgrounds/produce-mobile-55f58dcb9b.webp",
+      "width": 338,
+      "height": 450,
+      "bytes": 13360
+    }
+  },
+  {
+    "id": "meals",
+    "theme": "家常餐食",
+    "enabled": true,
+    "source": "用户提供，用于本项目公共背景",
+    "originalName": "20201125003980.jpg",
+    "originalWidth": 656,
+    "originalHeight": 450,
+    "desktopEligible": false,
+    "desktop": {
+      "src": "/backgrounds/meals-desktop-4b641bc356.webp",
+      "width": 656,
+      "height": 450,
+      "bytes": 62148
+    },
+    "mobile": {
+      "src": "/backgrounds/meals-mobile-73baef1779.webp",
+      "width": 337,
+      "height": 449,
+      "bytes": 29340
+    }
+  },
+  {
+    "id": "breakfast",
+    "theme": "早餐",
+    "enabled": true,
+    "source": "用户提供，用于本项目公共背景",
+    "originalName": "esIKPqavd1iJLa_rrFB07IAXc9LvC5Jy4npe8HC4F-o.jpg",
+    "originalWidth": 1024,
+    "originalHeight": 683,
+    "desktopEligible": true,
+    "desktop": {
+      "src": "/backgrounds/breakfast-desktop-82f3ccd2b8.webp",
+      "width": 1024,
+      "height": 683,
+      "bytes": 115976
+    },
+    "mobile": {
+      "src": "/backgrounds/breakfast-mobile-e292a89af7.webp",
+      "width": 480,
+      "height": 640,
+      "bytes": 52136
+    }
+  },
+  {
+    "id": "vegetables",
+    "theme": "缤纷蔬果",
+    "enabled": true,
+    "source": "用户提供，用于本项目公共背景",
+    "originalName": "fredhollows-vegetable.jpg",
+    "originalWidth": 1250,
+    "originalHeight": 1250,
+    "desktopEligible": true,
+    "desktop": {
+      "src": "/backgrounds/vegetables-desktop-58e4cb4c4a.webp",
+      "width": 1250,
+      "height": 1250,
+      "bytes": 230270
+    },
+    "mobile": {
+      "src": "/backgrounds/vegetables-mobile-9460b85d50.webp",
+      "width": 480,
+      "height": 640,
+      "bytes": 64032
+    }
+  }
+]

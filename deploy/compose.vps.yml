@@ -1,0 +1,27 @@
+# Use from the repository root: docker compose -p lifeos -f compose.yml -f deploy/compose.vps.yml up -d --build
+services:
+  db:
+    restart: unless-stopped
+  backend:
+    restart: unless-stopped
+    environment:
+      ALLOWED_ORIGINS: https://yeta-lifeos.xyz
+      COOKIE_SECURE: "true"
+  frontend:
+    restart: unless-stopped
+    ports: !override []
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [frontend]
+volumes:
+  caddy_data:
+  caddy_config:

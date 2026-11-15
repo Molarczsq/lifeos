@@ -204,7 +204,7 @@ for(const width of [375,768,1024,1440]){
   await expect(page.getByLabel('食物名称',{exact:true})).toHaveCount(0);
   const image=page.locator('.catalog-cover img').first();
   await expect(image).toBeVisible();
-  expect(await image.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth>0)).toBe(true);
+  await expect.poll(()=>image.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth>0)).toBe(true);
   await page.getByRole('button',{name:'添加食物',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'添加食物'})).toBeVisible();
   await page.getByRole('button',{name:'输入名称，让 AI 补充',exact:false}).click();
@@ -283,4 +283,42 @@ test('voice transcript remains editable and is not sent automatically',async({pa
  await expect(page.getByRole('button',{name:'复制消息',exact:true})).toHaveCount(0);
  await page.getByLabel('输入问题',{exact:true}).fill('今晚想吃面');
  await expect(page.getByLabel('输入问题',{exact:true})).toHaveValue('今晚想吃面');
+});
+
+test('background remains stable, changes between pages and keeps forms opaque',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto('/');
+ const background=page.getByTestId('random-background');
+ await expect(background).toHaveAttribute('data-state','ready');
+ const welcome=await background.locator('img').last().getAttribute('data-background-id');
+ await page.getByLabel('用户名',{exact:true}).fill('background_'+Date.now());
+ await expect(background.locator('img').last()).toHaveAttribute('data-background-id',welcome!);
+ await register(page,'bg_'+Date.now());
+ await expect(background).toHaveAttribute('data-page','overview');
+ await expect(background).toHaveAttribute('data-state','ready');
+ const first=await background.locator('img').last().getAttribute('data-background-id');
+ expect(first).not.toBe(welcome);
+ await page.getByRole('button',{name:'AI饮食规划',exact:true}).click();
+ await expect(background).toHaveAttribute('data-page','plan');
+ await expect(background).toHaveAttribute('data-state','ready');
+ expect(await background.locator('img').last().getAttribute('data-background-id')).not.toBe(first);
+ const image=background.locator('img').last();
+ expect(await image.evaluate((el:HTMLImageElement)=>el.complete&&el.naturalWidth>0)).toBe(true);
+ const src=await image.getAttribute('src');
+ const response=await page.request.get(src!);
+ expect(response.headers()['cache-control']).toContain('immutable');
+ await page.getByRole('button',{name:'AI识餐',exact:true}).click();
+ await expect(background).toHaveCount(0);
+ expect(errors.filter(error=>/hydration/i.test(error))).toEqual([]);
+});
+
+test('background image failure preserves brand fallback and reduced motion',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.route('**/backgrounds/**',route=>route.abort());
+ await page.goto('/');
+ await expect(page.getByTestId('random-background')).toHaveAttribute('data-state','fallback');
+ await expect(page.getByRole('button',{name:'创建账户，开启日常'})).toBeEnabled();
+ await page.getByRole('button',{name:'切换深色模式'}).click();
+ await expect(page.locator('.app')).toHaveClass(/dark/);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import console from 'node:console';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+const localRequire=createRequire(import.meta.url);
+const sharp=createRequire(localRequire.resolve('next/package.json'))('sharp');
+const source=process.argv[2];
+if(!source)throw new Error('Usage: node scripts/generate-backgrounds.mjs /path/to/approved-images');
+process.chdir(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'));
+fs.mkdirSync('public/backgrounds',{recursive:true});
+const files=[['00.webp','protein','蛋白质食材'],['292.jpeg','balance','多样食材'],['575b351c941e468b9512b3f2a438f813.jpeg','table','餐桌'],['4795317-PH.jpg','produce','蔬果'],['20201125003980.jpg','meals','家常餐食'],['esIKPqavd1iJLa_rrFB07IAXc9LvC5Jy4npe8HC4F-o.jpg','breakfast','早餐'],['fredhollows-vegetable.jpg','vegetables','缤纷蔬果']];
+(async()=>{const pool=[];for(const [name,id,theme]of files){const input=path.join(source,name),m=await sharp(input).metadata();const sizes={desktop:{width:Math.min(1280,m.width),height:Math.round(m.height*Math.min(1280,m.width)/m.width)},mobile:{width:Math.min(480,m.width,Math.floor(m.height*3/4)),height:0}};sizes.mobile.height=Math.floor(sizes.mobile.width*4/3);const variants={};for(const [kind,size]of Object.entries(sizes)){const data=await sharp(input).rotate().resize(size.width,size.height,{fit:'cover',position:'centre',withoutEnlargement:true}).webp({quality:72,effort:5}).toBuffer();const hash=crypto.createHash('sha256').update(data).digest('hex').slice(0,10);const file=`${id}-${kind}-${hash}.webp`;fs.writeFileSync('public/backgrounds/'+file,data);variants[kind]={src:'/backgrounds/'+file,...size,bytes:data.length};}pool.push({id,theme,enabled:true,source:'用户提供，用于本项目公共背景',originalName:name,originalWidth:m.width,originalHeight:m.height,desktopEligible:m.width>=1000,...variants});}fs.writeFileSync('lib/background-pool.json',JSON.stringify(pool,null,2)+'\n');console.log(pool.map(p=>({id:p.id,desktop:p.desktop.bytes,mobile:p.mobile.bytes})));})();

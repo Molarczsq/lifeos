@@ -206,3 +206,36 @@ CI=1 pnpm test:e2e
 新增记录复用现有 `records`：`preferences`、`plan`、`action`、`ai-insight`、`ai-usage`；无需删表、重建库或导入附件localStorage。动作有效1小时，按用户隔离，并绑定授权版本。Docker按原启动方式更新，已有卷须保留。附件移植与删除决策见 [AI迁移审计](docs/AI_MIGRATION.md)。
 
 技术亮点是可验证的工具调用、可解释检索、确认后写入、生成式约束规划和授权版本隔离，而非堆叠Agent名称。商业上可围绕饮食规划订阅探索，当前无收费或医疗服务功能。
+
+## 随机背景系统（2026-11）
+
+公共背景仅使用本次用户明确提供的七张饮食图片；来源记录为“用户提供，用于本项目公共背景”，不宣称第三方开放许可。用户账户上传的餐食图片永远不会自动进入此资源池。
+
+- `BackgroundProvider` 统一选图，`RandomBackground` 管理加载与切换，`BackgroundOverlay` 提供遮罩；所有页面仍复用原 AppShell、Sidebar 和 Header。
+- 欢迎/登录、驾驶舱、饮食规划、盲盒和顾问空状态启用。聊天消息、识别结果、表单和目录卡片保留不透明底色。
+- `frontend/lib/background-pool.json` 记录来源、主题、尺寸和启用状态。页面内保持稳定，切换页面避免连续重复；sessionStorage 只保存装饰图片 ID，不含健康信息。
+- SSR 先显示品牌渐变，客户端挂载后选择图片，避免随机 hydration 不一致。当前图 eager/high priority 加载，不预先下载整个图片池；失败回退品牌渐变。
+- `backgroundConfig.autoRotateMs` 默认 0（关闭），启用时最低间隔10秒，650ms淡入淡出；减少动态效果偏好关闭自动轮换及动画。浅色/深色遮罩位于 `globals.css` 的 `.background-overlay`，浅色约84%、深色约82%，边缘渐变提高可读性。
+- 生成桌面和手机 WebP 变体，不放大原图。宽度不足1000px的原图不用于桌面，显示尺寸亦不超过资源原生尺寸。手机约13–79KB/张，桌面可用资源约116–230KB/张；切换只按需加载下一张。
+- 文件名含内容哈希，`next.config.ts` 为 `/backgrounds/` 设置一年 immutable 缓存。替换图片必须重新生成文件名，不能覆盖同名资源。
+
+添加公共资源：确认图片适用于公开展示后，修改 `frontend/scripts/generate-backgrounds.mjs` 中的明确文件列表，运行：
+
+```bash
+cd frontend
+node scripts/generate-backgrounds.mjs /path/to/approved-images
+pnpm lint && pnpm typecheck && pnpm build
+pnpm test:e2e
+```
+
+检查 pool 元数据及新图内容后提交；不要将上传目录或数据库图片自动扫描进公共池。本次只增加静态资源，无数据库迁移或新环境变量。
+
+### 背景验证与性能采样
+
+E2E 覆盖背景加载、缓存、页面内稳定、切页去重、图片故障回退、减少动画/深色模式及原有登录、记录、聊天流程；布局覆盖375、768、1024、1440px。
+
+可在启动生产构建后执行 `BASE_URL=http://localhost:3000 node scripts/background-performance.mjs`，需先安装 Playwright Chromium。脚本在375/1440px各采样启用/禁用背景各3次，保存 LCP、CLS、图片请求及截图到 `test-results/`。这是本机无网络/CPU限速的小样本诊断，不代表真实用户或生产性能；禁用组通过阻断图片模拟品牌渐变兜底。
+
+域名、DNS、HTTPS、Cookie 与 VPS 更新说明见 [VPS部署记录](docs/VPS_DEPLOYMENT.md)。
+
+本次本机验收：`python -m pytest -q` 86通过；`tsc --noEmit`、`eslint .`、`next build`通过；生产构建 WebKit E2E 15通过。Chromium 12次采样无水平溢出，每页至多1个背景请求；375px LCP中位数禁用/启用476/448ms，1440px为288/280ms，最大CLS分别约0.00200/0.00035。这些差异在小样本噪声范围内，不能据此宣称背景提升性能。初次测试发现目录图片断言未等待加载，已改为等待解码完成；一次本地重建干扰了正在运行的测试，分开构建与测试后全套通过。
