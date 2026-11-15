@@ -58,7 +58,12 @@ class GenerativeAdvisor:
           checked=review_answer(final);answer=checked or final;mode='safety' if checked else 'live-model'
         except ProviderUnavailable:
           yield {'type':'draft','text':''}
-          answer='模型当前不可用，未生成AI建议。请稍后重试；待确认操作尚未写入饮食记录。';mode='unavailable'
+          yield {'type':'step','name':'流式输出未通过校验，重新请求结构化回答'}
+          try:
+            final=(await OpenAICompatibleProvider().generate(prompt,Answer,image)).text
+            checked=review_answer(final);answer=checked or final;mode='safety' if checked else 'live-model'
+          except ProviderUnavailable:
+            answer='模型当前不可用，未生成AI建议。请稍后重试；待确认操作尚未写入饮食记录。';mode='unavailable'
       if request and await request.is_disconnected():return
       if revision(s,u)!=rev:
         yield {'type':'error','text':'授权已变更，请重新发送问题'}

@@ -112,3 +112,25 @@ def test_v2_stream_and_two_round_food_lookup(c,monkeypatch):
     assert len(seen)==2 and any(e['type']=='draft' for e in frames)
     assert next(e for e in frames if e['type']=='answer')['actions']
     assert not c.get('/api/v1/food/entries').json()
+
+
+def test_safe_identity_disclaimer_is_not_medical_advice():
+    from app.agents import review_answer
+    assert review_answer('我是智膳AI。我不做疾病诊断、不开处方、不承诺疗效。') is None
+    assert review_answer('我不做疾病诊断，但建议你停药。') is not None
+    assert review_answer('我不开处方，你可以自行调整胰岛素。') is not None
+
+
+def test_v2_invalid_stream_retries_validated_response(c,monkeypatch):
+    from app.llm import ProviderUnavailable
+    fake_model(monkeypatch);monkeypatch.setenv('LLM_API_KEY','test')
+    async def calls(*args):return []
+    async def stream(*args):
+        yield {'type':'draft','text':'未完成的草稿'}
+        raise ProviderUnavailable('结构化结果无效')
+    monkeypatch.setattr('app.ai_advisor.plan_calls',calls)
+    monkeypatch.setattr('app.ai_advisor.stream_answer',stream)
+    frames=events(c.post('/api/v1/advisor/chat/stream',json={'message':'你是谁','agent_version':2,'stream':True}))
+    assert any(e['type']=='draft' and e['text']=='' for e in frames)
+    assert any(e['type']=='step' and '重新请求' in e['name'] for e in frames)
+    assert next(e for e in frames if e['type']=='answer')['mode']=='live-model'
