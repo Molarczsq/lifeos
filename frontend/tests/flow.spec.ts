@@ -285,7 +285,7 @@ test('voice transcript remains editable and is not sent automatically',async({pa
  await expect(page.getByLabel('输入问题',{exact:true})).toHaveValue('今晚想吃面');
 });
 
-test('background remains stable, changes between pages and keeps forms opaque',async({page})=>{
+test('background remains stable, changes between pages and preserves reading surfaces',async({page})=>{
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto('/');
  const background=page.getByTestId('random-background');
@@ -308,7 +308,8 @@ test('background remains stable, changes between pages and keeps forms opaque',a
  const response=await page.request.get(src!);
  expect(response.headers()['cache-control']).toContain('immutable');
  await page.getByRole('button',{name:'AI识餐',exact:true}).click();
- await expect(background).toHaveCount(0);
+ await expect(background).toHaveAttribute('data-page','scan');
+ await expect(background).toHaveAttribute('data-state','ready');
  expect(errors.filter(error=>/hydration/i.test(error))).toEqual([]);
 });
 
@@ -321,4 +322,37 @@ test('background image failure preserves brand fallback and reduced motion',asyn
  await page.getByRole('button',{name:'切换深色模式'}).click();
  await expect(page.locator('.app')).toHaveClass(/dark/);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+for(const width of [375,768,1024,1440])test(`full viewport glass background and contrast at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:900});
+ await page.goto('/');
+ const background=page.getByTestId('random-background');
+ await expect(background).toHaveAttribute('data-state','ready');
+ for(const dark of [false,true]){
+  if(dark)await page.getByRole('button',{name:'切换深色模式'}).click();
+  const geometry=await background.evaluate(el=>{const r=el.getBoundingClientRect();const image=el.querySelector('img')!;const ir=image.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,imageWidth:ir.width,imageHeight:ir.height,fit:getComputedStyle(image).objectFit,position:getComputedStyle(el).position,pointer:getComputedStyle(el).pointerEvents}});
+  expect(geometry).toMatchObject({x:0,y:0,width,height:900,imageWidth:width,imageHeight:900,fit:'cover',position:'fixed',pointer:'none'});
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
+  expect((await background.boundingBox())?.y).toBe(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  const readings=await page.evaluate(()=>{
+   const rgb=(s:string)=>s.match(/[\d.]+/g)!.map(Number);
+   const luminance=(c:number[])=>c.slice(0,3).map(v=>{const s=v/255;return s<=.04045?s/12.92:((s+.055)/1.055)**2.4}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0);
+   const ratio=(a:number[],b:number[])=>{const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+   const bg=rgb(getComputedStyle(document.querySelector('.card')!).backgroundColor),alpha=bg[3]??1;
+   const inks=['label','small','.ghost'].map(selector=>rgb(getComputedStyle(document.querySelector('.welcome '+selector)!).color));
+   const contrasts=inks.flatMap(ink=>[0,255].map(extreme=>ratio(ink,bg.slice(0,3).map(v=>v*alpha+extreme*(1-alpha)))));
+   const style=getComputedStyle(document.querySelector('.welcome form button:not([type])')!);
+   const border=rgb(getComputedStyle(document.querySelector('.welcome input')!).borderColor);
+   const boundaries=[0,255].map(extreme=>ratio(border,bg.slice(0,3).map(v=>v*alpha+extreme*(1-alpha))));
+   return {alpha,contrasts,boundaries,button:ratio(rgb(style.color),rgb(style.backgroundColor)),opacity:getComputedStyle(document.querySelector('.card')!).opacity};
+  });
+  expect(readings.alpha).toBeLessThan(1);
+  expect(readings.opacity).toBe('1');
+  for(const ratio of readings.contrasts)expect(ratio).toBeGreaterThanOrEqual(4.5);
+  expect(readings.button).toBeGreaterThanOrEqual(4.5);
+  for(const ratio of readings.boundaries)expect(ratio).toBeGreaterThanOrEqual(3);
+  await page.getByLabel('用户名',{exact:true}).fill(dark?'dark_readable':'light_readable');
+ }
 });

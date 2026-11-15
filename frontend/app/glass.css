@@ -1,0 +1,71 @@
+/* One shared glass palette; alpha affects surfaces, never their text/children. */
+:root {
+  --surface:rgba(255,255,255,.72);
+  --glass-nav:rgba(255,255,255,.80);
+  --glass-header:rgba(255,255,255,.76);
+  --glass-modal:rgba(255,255,255,.94);
+  --glass-input:rgba(255,255,255,.90);
+  --glass-reading:rgba(255,255,255,.92);
+  --glass-accent:rgba(232,241,233,.90);
+  --text:#20382d;
+  --muted:#354a3e;
+  --link:#164c37;
+  --control-border:#4b6356;
+  --background-transition:650ms;
+}
+.app.dark {
+  --surface:rgba(28,46,37,.84);
+  --glass-nav:rgba(28,46,37,.90);
+  --glass-header:rgba(28,46,37,.88);
+  --glass-modal:rgba(28,46,37,.97);
+  --glass-input:rgba(22,38,30,.95);
+  --glass-reading:rgba(28,46,37,.96);
+  --glass-accent:rgba(43,65,49,.95);
+  --text:#f0f5f1;
+  --muted:#d0ded5;
+  --link:#a3e5c5;
+  --control-border:#8ea899;
+}
+/* Root isolation keeps negative-z decoration behind both navigation and content. */
+html,body{min-height:100%;background:var(--page)}
+.app{position:relative;isolation:isolate;background:transparent;min-height:100vh;min-height:100dvh}
+.app .workspace,.app .page-container{background:transparent}
+.random-background{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;z-index:-1;overflow:hidden;pointer-events:none;background:linear-gradient(135deg,var(--page),var(--accent),var(--page));background-size:cover;background-position:center center;background-repeat:no-repeat}
+.background-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center;opacity:0;transition:opacity var(--background-transition) ease}
+.background-photo.ready{opacity:1}
+.background-overlay{position:absolute;inset:0;background:linear-gradient(155deg,rgba(247,249,246,.28),rgba(247,249,246,.18) 45%,rgba(247,249,246,.26))}
+.dark .background-overlay{background:linear-gradient(155deg,rgba(17,35,29,.58),rgba(17,35,29,.42) 45%,rgba(17,35,29,.58))}
+.app :is(.card,.catalog-tile,.advisor-shell,.chat,.global-sidebar,.global-header,.lifeos-dialog,.title-row>div,footer){background:var(--surface);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-color:var(--border);box-shadow:var(--shadow)}
+.app .global-sidebar{background:var(--glass-nav)}
+.app .global-header{background:var(--glass-header);color:var(--muted)}
+.app .lifeos-dialog,.app .food-options{background:var(--glass-modal);color:var(--text)}
+.app :is(input,select,textarea){background:var(--glass-input);color:var(--text);border-color:var(--control-border)}
+.app :is(input,textarea)::placeholder{color:var(--muted);opacity:1}
+.app :is(.welcome form,.vision-drafts,.nutrition-details,.ai-action,.composer-area,.assistant-bubble,.message){background:var(--glass-reading);color:var(--text)}
+.app :is(.hero,.welcome>div,.sidebar-bottom,.inspiration,.upload,.user-bubble,.message.user,.context-card,.suggestion-grid button,.advisor-composer){background:var(--glass-accent);color:var(--text)}
+.app .assistant-bubble{padding:16px;border-radius:12px}
+.app .composer-area{border-radius:16px 16px 0 0}
+.app .nutrition-details,.app .vision-drafts{padding:12px;border-radius:12px}
+.app .title-row>div{padding:14px 18px;border-radius:var(--radius);background:var(--glass-reading)}
+.app footer{padding:12px 16px;border-radius:12px;background:var(--glass-reading)}
+/* Replace legacy low-contrast hardcoded captions with a shared accessible ink. */
+.app :is(small,label,footer,.eyebrow,.muted,.empty,.pre,.date,.box-empty,.title-row p,.hero p,.welcome p,.inspiration p,.sidebar-bottom p,.record p,.stats p,.stats article>span,.catalog-tile small,.global-sidebar nav button,.global-sidebar nav a){color:var(--muted)}
+.app :is(.ghost,.icon,.text-button,.citation,.attach-label,.message a,.advisor-toolbar a){color:var(--link)}
+.app :is(.ghost,.icon,.text-button){background:transparent}
+.app .global-sidebar nav :is(.selected,:hover){background:var(--glass-accent);color:var(--link)}
+.app .badge,.app .avatar{background:var(--glass-accent);color:var(--link)}
+.app .catalog-cover small{background:var(--glass-reading);color:var(--muted)}
+.app :is(button,a,input,select,textarea):focus-visible{outline:3px solid var(--link);outline-offset:3px}
+.app :is(input,select,textarea){border-width:1px;border-style:solid}
+@media(max-width:760px){
+ .app{--surface:rgba(255,255,255,.84);--glass-nav:rgba(255,255,255,.92);--glass-header:rgba(255,255,255,.88)}
+ .app.dark{--surface:rgba(28,46,37,.92);--glass-nav:rgba(28,46,37,.96);--glass-header:rgba(28,46,37,.94)}
+ .app .title-row>div{padding:10px 12px}
+ .chat-page .title-row{margin-bottom:10px}
+}
+@media(prefers-reduced-motion:reduce){.background-photo{transition:none}}
+/* No blur support: keep reading surfaces solid. Photo remains visible in gutters. */
+@supports not ((backdrop-filter:blur(8px)) or (-webkit-backdrop-filter:blur(8px))){
+ .app{--surface:#fff;--glass-nav:#fff;--glass-header:#fff}
+ .app.dark{--surface:#1c2e25;--glass-nav:#1c2e25;--glass-header:#1c2e25}
+}

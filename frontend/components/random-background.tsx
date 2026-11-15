@@ -1,6 +1,6 @@
 'use client';
 
-import {createContext,useCallback,useContext,useEffect,useRef,useState,ReactNode,CSSProperties} from 'react';
+import {createContext,useCallback,useContext,useEffect,useRef,useState,ReactNode} from 'react';
 import imagePool from '../lib/background-pool.json';
 
 type BackgroundImage=typeof imagePool[number];
@@ -57,7 +57,7 @@ export function RandomBackground({pageKey,enabled=true,autoRotateMs=backgroundCo
  }
  if(!enabled)return null;
  return <div className="random-background" aria-hidden="true" data-testid="random-background" data-page={pageKey} data-state={frames.at(-1)?.ready?'ready':'fallback'}>
-  {frames.map(frame=>{const variant=frame.mobile?frame.image.mobile:frame.image.desktop;return <img key={frame.image.id} src={variant.src} width={variant.width} height={variant.height} alt="" decoding="async" loading="eager" fetchPriority="high" className={frame.ready?'background-photo ready':'background-photo'} style={{'--photo-width':variant.width+'px','--photo-height':variant.height+'px'} as CSSProperties} data-background-id={frame.image.id} onLoad={()=>loaded(frame.image.id)} onError={()=>setFrames([])}/>})}
+  {frames.map(frame=>{const variant=frame.mobile?frame.image.mobile:frame.image.desktop;return <img key={frame.image.id} src={variant.src} width={variant.width} height={variant.height} alt="" decoding="async" loading="eager" fetchPriority="high" className={frame.ready?'background-photo ready':'background-photo'} data-background-id={frame.image.id} onLoad={()=>loaded(frame.image.id)} onError={()=>setFrames([])}/>})}
   <BackgroundOverlay/>
  </div>;
 }
