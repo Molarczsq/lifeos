@@ -1,9 +1,9 @@
 'use client';
 import {ReactNode,CSSProperties,useEffect,useState,useRef} from 'react';
-import {Leaf,LayoutDashboard,ScanLine,Utensils,Gift,ShieldCheck,History,MessageCircle,Sun,LogOut,ArrowUpRight} from 'lucide-react';
+import {Leaf,LayoutDashboard,ScanLine,Utensils,Gift,ShieldCheck,History,MessageCircle,Sun,LogOut,ArrowUpRight,ChefHat} from 'lucide-react';
 import {BackgroundProvider,RandomBackground} from './random-background';
 import {UserProfile} from './auth-panel';
-export const navigation=[['overview','AI健康驾驶舱',LayoutDashboard],['scan','AI识餐',ScanLine],['plan','AI饮食规划',Utensils],['box','AI食物盲盒',Gift],['advisor','问问智膳',MessageCircle],['catalog','AI食物知识库',Utensils]] as const;
+export const navigation=[['overview','AI健康驾驶舱',LayoutDashboard],['scan','AI识餐',ScanLine],['recipes','怎么做菜',ChefHat],['plan','AI饮食规划',Utensils],['box','AI食物盲盒',Gift],['advisor','问问智膳',MessageCircle],['catalog','AI食物知识库',Utensils]] as const;
 export function Brand(){return <><span className="logo"><Leaf aria-hidden="true"/></span>智膳 <b>LifeOS</b></>}
 export function AppShell({active,profile,onNavigate,onLogout,ai,children,overlay,chat=false}:{active:string;profile:UserProfile|null;onNavigate?:(id:string)=>void;onLogout:()=>void;ai?:string;children:ReactNode;overlay?:ReactNode;chat?:boolean}){
  const [dark,setDark]=useState(false);

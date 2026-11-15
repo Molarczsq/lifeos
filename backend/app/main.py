@@ -12,9 +12,10 @@ from .auth import router as auth_router, user
 from .catalog import router as catalog_router, catalog_map, estimate
 from .media import router as media_router, owned_image, image_url
 from .advisor import router as advisor_router, resolve_conversation
-from .schemas import Auth, Consent, Food, MealRequest, Metric, Chat, Answer, Feedback
+from .schemas import Auth, Consent, Food, MealRequest, Metric, Chat, Answer, Feedback, RecipeRequest
 from .agents import FOODS, SOURCE, nutrition, search, safety, review_answer, NutritionPlannerAgent, HealthInsightAgent
 from .llm import OpenAICompatibleProvider, FoodVisionAgent, ProviderUnavailable, plan_tools, stream_answer
+from .recipes import recommend as recommend_recipes
 
 @asynccontextmanager
 async def lifespan(app):
@@ -77,6 +78,15 @@ def mystery(body:MealRequest,u=Depends(user),s=Depends(db)):
     if len(meals)>1 and past and meals[0]['id']==past[-1]['meal_id']: meals=meals[1:]+meals[:1]
     if meals: put(s,u,'mystery',{'meal_id':meals[0]['id']})
     return {'meal':meals[0] if meals else None,'mode':'rules'}
+@app.post(P+'/recipes/recommend')
+async def recipe_recommend(body:RecipeRequest,u=Depends(user),s=Depends(db)):
+    if not (u.consents.get('external_ai') and os.getenv('LLM_API_KEY')):
+        raise HTTPException(503,'未连接 AI 模型：需要部署者配置 LLM_API_KEY 等环境变量，并在「数据与隐私」开启「外部 AI 处理」。此功能不提供本地菜谱兜底。')
+    catalog={k:v['name'] for k,v in catalog_map(s,u).items()}
+    try:
+        return await recommend_recipes(body,catalog)
+    except ProviderUnavailable:
+        raise HTTPException(503,'AI 模型不可用或生成结果未通过结构校验与安全复核，请稍后重试。') from None
 @app.post(P+'/meals/feedback')
 def feedback(body:Feedback,u=Depends(user),s=Depends(db)): return put(s,u,'feedback',body.model_dump())
 @app.get(P+'/health/metrics')
