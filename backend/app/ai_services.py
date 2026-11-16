@@ -73,8 +73,9 @@ def get_preferences(u=Depends(user),s=Depends(db)):
     r=rows(s,u,'preferences');return {'preferences':r[-1].data if r else Preferences().model_dump(),'authorized':bool(u.consents.get('diet'))}
 @router.post('/profile/turn')
 async def profile_turn(body:ProfileTurn,u=Depends(user),s=Depends(db)):
+    # Skipping saves nothing, so it must not be blocked by a missing consent.
+    if body.skip:return {'skipped':True,'question':'已跳过饮食建档，没有保存任何偏好；随时可以回来补充。','action':None}
     require(u,'diet')
-    if body.skip:return {'skipped':True,'question':'可以随时回来补充。先记录一餐，或告诉我下一餐的想法。','action':None}
     if safety(body.text):raise HTTPException(422,safety(body.text))
     p=preferences(s,u)
     result=await generate(json.dumps({'task':'对话式饮食建档：只提取用户明确说出的偏好，合并已有偏好；未知留空，不推测疾病。只追问一个最必要问题，先问过敏/忌口，再问目标和习惯。不要求年龄性别身体指标。', 'existing':p,'user':body.text},ensure_ascii=False),ProfileDraft,u,s)

@@ -22,6 +22,7 @@ def build_prompt(req: RecipeRequest, catalog: dict[str, str]) -> str:
         'task': '根据手里的食材、口味、可用时间、份数与忌口，生成 1 到 3 道可操作的家常菜，每道给出用料、分步做法与每步火候。',
         'request': {
             'ingredient_names': [catalog.get(i, i) for i in req.ingredients],
+            'extra_ingredient_names': req.extra_ingredients,
             'flavor': FLAVORS.get(req.flavor, '不限'),
             'max_minutes': req.max_minutes,
             'servings': req.servings,
@@ -32,6 +33,7 @@ def build_prompt(req: RecipeRequest, catalog: dict[str, str]) -> str:
         ],
         'rules': [
             'items 中的 food_id 只能取自 available_food_ids；找不到对应食物时把 items 留空，不要编造 id。',
+            'extra_ingredient_names 是用户手头另有的食材，不在食物目录中；可以用来搭配做法，但 items 不要引用它们，也不要估算其营养。',
             '必须排除 banned 中的忌口食材及其常见别名与含该成分的调味料；不确定是否含有时不要使用，并在 note 中说明无法核实。',
             '每道菜至少 2 步，每步写清火候；只写一般家常烹饪做法。',
             '份量与营养均为估计，不是实测；调味料与另备食材需单独说明。',
@@ -79,6 +81,8 @@ async def recommend(req: RecipeRequest, catalog: dict[str, str]):
     ]
     note = ('菜谱由 AI 模型生成并经 JSON Schema 校验与安全复核，未经人工逐条核验；'
             '份量与营养均为估计，调味料与另备食材需自行准备。')
+    if req.extra_ingredients:
+        note += ' 手头补充食材仅用于生成做法，未写入食物目录、不计入营养估计，也不能直接记录这餐。'
     if req.allergens:
         note += (' 忌口「' + '、'.join(req.allergens) + '」由模型按要求排除，'
                  '服务端无法核实别名、调味料成分与交叉接触风险，请食用前自行确认。')

@@ -108,10 +108,18 @@ class FoodNameRequest(Strict):
 
 class RecipeRequest(Strict):
     ingredients: list[str] = Field(default_factory=list, max_length=20)
+    extra_ingredients: list[str] = Field(default_factory=list, max_length=10)
     flavor: Literal['any','light','savory','spicy'] = 'any'
     max_minutes: int = Field(default=30, ge=5, le=120)
     allergens: list[str] = Field(default_factory=list, max_length=20)
     servings: int = Field(default=1, ge=1, le=6)
+
+    @field_validator('extra_ingredients')
+    @classmethod
+    def bounded_extras(cls, values):
+        cleaned=[v.strip() for v in values]
+        if any(not v or len(v)>40 for v in cleaned): raise ValueError('补充食材需为1–40字')
+        return list(dict.fromkeys(cleaned))
 
 class RecipeStep(Strict):
     title: str = Field(min_length=1, max_length=60)

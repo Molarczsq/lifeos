@@ -258,6 +258,7 @@ test('knowledge retrieval, profile skip and unavailable AI are explicit',async({
  await expect(page.getByLabel('输入问题',{exact:true})).toHaveValue('全谷物 燕麦 主食');
  await page.getByRole('button',{name:'饮食建档',exact:true}).click();
  await page.getByRole('button',{name:'跳过',exact:true}).click();
+ await expect(page.getByText('已跳过饮食建档，没有保存任何偏好。')).toBeVisible();
  await expect(page.getByRole('button',{name:'确认保存',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'关闭弹窗'}).click();
  await page.getByRole('button',{name:'发送',exact:true}).click();
