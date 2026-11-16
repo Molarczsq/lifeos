@@ -55,14 +55,32 @@ def remove(cid:str,u=Depends(user),s=Depends(db)):
 
 @router.get('/suggestions')
 def suggestions(page:str='',conversation_id:str|None=None,u=Depends(user),s=Depends(db)):
-    questions=['你可以怎样帮助我？','怎样让一餐搭配更丰富？']
-    if page in ('scan','catalog'): questions.insert(0,'这道菜需要补充哪些食材或份量信息？')
+    # Deterministic, consent-scoped guesses for what the user may want to ask.
+    # These are context rules, never presented as model intent prediction.
+    predicted=[];basis=[]
     if u.consents.get('diet'):
         today=datetime.now(timezone.utc).date().isoformat()
         rows=s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='food')).all()
-        if any(r.data.get('recorded_at','').startswith(today) for r in rows): questions.insert(0,'结合今天已记录的饮食，下一餐可以如何搭配？')
+        if any(str(r.data.get('recorded_at') or r.created_at or '').startswith(today) for r in rows):
+            predicted.append('结合今天已记录的饮食，下一餐可以如何搭配？');basis.append('今日饮食记录')
+        elif rows:
+            predicted.append('根据最近记录的饮食，下一餐可以怎么调整？');basis.append('近期饮食记录')
+        else:
+            predicted.append('我还没记录过一餐，怎么开始最省事？');basis.append('暂无饮食记录')
+        pref=s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='preferences').order_by(Record.created_at.desc())).first()
+        if pref and any(pref.data.get(k) for k in ('allergens','avoid','likes','goal')):
+            predicted.append('按我保存的饮食偏好，今天适合怎么吃？');basis.append('已保存的饮食偏好')
+    else:
+        predicted.append('开启饮食上下文授权后，能给我哪些更贴合的建议？');basis.append('未授权饮食上下文')
     if u.consents.get('health') and s.scalar(select(Record.id).where(Record.user_id==u.id,Record.kind=='metric').limit(1)):
-        questions.insert(0,'根据最近活动记录，有什么容易坚持的小习惯？')
+        predicted.append('根据最近活动记录，有什么容易坚持的小习惯？');basis.append('身体活动记录')
+    if page in ('scan','catalog'):
+        predicted.insert(0,'这道菜需要补充哪些食材或份量信息？')
+    elif page=='recipes':
+        predicted.insert(0,'用手里的食材，十几分钟能做什么？')
+    elif page=='plan':
+        predicted.insert(0,'按我的预算和忌口，下一餐怎么安排？')
+    questions=predicted+['你可以怎样帮助我？','怎样让一餐搭配更丰富？','如何建立规律的作息？']
     if conversation_id:
         owned_conversation(s,u,conversation_id)
         if any(r.data.get('conversation_id')==conversation_id for r in s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='chat'))):
@@ -73,7 +91,7 @@ def suggestions(page:str='',conversation_id:str|None=None,u=Depends(user),s=Depe
         latest=s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='ai-insight').order_by(Record.created_at.desc())).first()
         if latest and latest.data.get('revision')==revision(s,u):
             questions=latest.data.get('questions',[])+questions;mode='ai-and-context'
-    return {'questions':list(dict.fromkeys(questions))[:5],'mode':mode}
+    return {'questions':list(dict.fromkeys(questions))[:5],'mode':mode,'predicted':bool(predicted),'basis':basis}
 
 @router.post('/quick')
 def quick(u=Depends(user),s=Depends(db)):
