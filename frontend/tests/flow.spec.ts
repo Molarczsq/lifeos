@@ -286,6 +286,8 @@ test('voice transcript remains editable and is not sent automatically',async({pa
 });
 
 test('background remains stable, changes between pages and preserves reading surfaces',async({page})=>{
+ // Exercise cached A → B → A selection instead of depending on random luck.
+ await page.addInitScript(()=>{Math.random=()=>0});
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto('/');
  const background=page.getByTestId('random-background');
@@ -331,8 +333,8 @@ for(const width of [375,768,1024,1440])test(`full viewport glass background and 
  await expect(background).toHaveAttribute('data-state','ready');
  for(const dark of [false,true]){
   if(dark)await page.getByRole('button',{name:'切换深色模式'}).click();
-  const geometry=await background.evaluate(el=>{const r=el.getBoundingClientRect();const image=el.querySelector('img')!;const ir=image.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,imageWidth:ir.width,imageHeight:ir.height,fit:getComputedStyle(image).objectFit,position:getComputedStyle(el).position,pointer:getComputedStyle(el).pointerEvents}});
-  expect(geometry).toMatchObject({x:0,y:0,width,height:900,imageWidth:width,imageHeight:900,fit:'cover',position:'fixed',pointer:'none'});
+  const geometry=await background.evaluate(el=>{const r=el.getBoundingClientRect();const image=el.querySelector('img')!;const ir=image.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,imageWidth:ir.width,imageHeight:ir.height,imageX:ir.x,imageY:ir.y,mask:getComputedStyle(image).maskImage,fit:getComputedStyle(image).objectFit,position:getComputedStyle(el).position,pointer:getComputedStyle(el).pointerEvents}});
+  expect(geometry).toMatchObject({x:0,y:0,width,height:900,imageWidth:width,imageHeight:900,imageX:0,imageY:0,mask:'none',fit:'cover',position:'fixed',pointer:'none'});
   await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
   expect((await background.boundingBox())?.y).toBe(0);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);

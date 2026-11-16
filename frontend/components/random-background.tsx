@@ -39,7 +39,14 @@ export function RandomBackground({pageKey,enabled=true,autoRotateMs=backgroundCo
   if(!pick||document.hidden)return;
   const mobile=window.matchMedia('(max-width: 760px)').matches;
   const image=pick(mobile);
-  if(image)setFrames(previous=>[...previous.filter(frame=>frame.ready&&frame.image.id!==image.id).slice(-1),{image,mobile,ready:false}]);
+  if(retire.current)clearTimeout(retire.current);
+  if(image)setFrames(previous=>{
+   // A rapid A → B → A can reuse the still-mounted A image. Its src does not
+   // change, so browsers need not fire onLoad again: preserve its loaded state.
+   const reused=previous.find(frame=>frame.image.id===image.id&&frame.mobile===mobile&&frame.ready);
+   if(reused)return [reused];
+   return [...previous.filter(frame=>frame.ready&&frame.image.id!==image.id).slice(-1),{image,mobile,ready:false}];
+  });
  },[pick]);
  useEffect(()=>{
   if(enabled)change();else setFrames([]);
@@ -53,7 +60,7 @@ export function RandomBackground({pageKey,enabled=true,autoRotateMs=backgroundCo
  function loaded(id:string){
   setFrames(previous=>previous.map(frame=>frame.image.id===id?{...frame,ready:true}:frame));
   if(retire.current)clearTimeout(retire.current);
-  retire.current=setTimeout(()=>setFrames(previous=>previous.filter(frame=>frame.image.id===id)),reduce?0:backgroundConfig.transitionMs);
+  retire.current=setTimeout(()=>setFrames(previous=>previous.at(-1)?.image.id===id?previous.filter(frame=>frame.image.id===id):previous),reduce?0:backgroundConfig.transitionMs);
  }
  if(!enabled)return null;
  return <div className="random-background" aria-hidden="true" data-testid="random-background" data-page={pageKey} data-state={frames.at(-1)?.ready?'ready':'fallback'}>
