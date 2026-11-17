@@ -403,3 +403,16 @@ test('custom cooking ingredients stay in sync through edit, removal and follow-u
  await expect(page.getByText('需要另备：盐')).toBeVisible();await page.getByLabel('继续调整菜谱').fill('少油一点');await page.getByRole('button',{name:'按新要求修改做法'}).click();await expect.poll(()=>bodies.length).toBe(2);expect(bodies[1]).toMatchObject({adjustment:'少油一点',previous_id:'cooking-test-id'});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+test('AI food blind box is hidden from navigation and legacy tab',async({page})=>{
+ await page.goto('/');await register(page,'hidebox_'+Date.now());
+ const nav=page.getByRole('navigation',{name:'主导航'});
+ await expect(nav).toBeVisible();
+ await expect(nav).not.toContainText('AI食物盲盒');
+ await expect(page.getByRole('button',{name:'AI饮食规划',exact:true})).toBeVisible();
+ await page.goto('/?tab=box');
+ await expect(page.getByRole('navigation',{name:'主导航'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'AI饮食规划',exact:true})).toBeVisible();
+ await expect(page.getByText('AI食物盲盒')).toHaveCount(0);
+ await expect(page.getByText('让 AI 给你一份餐食惊喜')).toHaveCount(0);
+});

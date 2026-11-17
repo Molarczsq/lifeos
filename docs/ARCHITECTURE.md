@@ -7,7 +7,7 @@ Next.js App Router → 同源 /api 代理 → FastAPI → SQLAlchemy → SQLite�
 |---|---|---|
 |1 架构|docs/ARCHITECTURE.md|边界、风险、覆盖矩阵明确|
 |2 工程|backend/app、frontend/app、compose.yml|认证、用户隔离、启动、健康检查|
-|3 饮食|agents.py、main.py、page.tsx|估计→人工修正→保存→推荐、盲盒|
+|3 饮食|agents.py、main.py、page.tsx|估计→人工修正→保存→推荐|
 |4 健康|schemas.py、main.py|验证、原子导入、去重、趋势、导出删除|
 |5 顾问|llm.py、agents.py、mcp_server.py|授权检查、检索引用、SSE事件、历史|
 |6 验证|backend/tests、frontend/tests|API测试、类型检查、生产构建|
