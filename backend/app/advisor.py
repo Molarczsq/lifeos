@@ -1,7 +1,7 @@
 """Conversation lifecycle. Existing chat records remain readable after migration."""
 from datetime import datetime, timezone
 from uuid import uuid4, uuid5, NAMESPACE_URL
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from .auth import user
 from .db import Conversation, Record, db
@@ -54,26 +54,10 @@ def remove(cid:str,u=Depends(user),s=Depends(db)):
     s.delete(row);s.commit();return {'ok':True}
 
 @router.get('/suggestions')
-def suggestions(page:str='',conversation_id:str|None=None,u=Depends(user),s=Depends(db)):
-    questions=['你可以怎样帮助我？','怎样让一餐搭配更丰富？']
-    if page in ('scan','catalog'): questions.insert(0,'这道菜需要补充哪些食材或份量信息？')
-    if u.consents.get('diet'):
-        today=datetime.now(timezone.utc).date().isoformat()
-        rows=s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='food')).all()
-        if any(r.data.get('recorded_at','').startswith(today) for r in rows): questions.insert(0,'结合今天已记录的饮食，下一餐可以如何搭配？')
-    if u.consents.get('health') and s.scalar(select(Record.id).where(Record.user_id==u.id,Record.kind=='metric').limit(1)):
-        questions.insert(0,'根据最近活动记录，有什么容易坚持的小习惯？')
-    if conversation_id:
-        owned_conversation(s,u,conversation_id)
-        if any(r.data.get('conversation_id')==conversation_id for r in s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='chat'))):
-            questions.append('请把刚才的建议整理成一个可执行的小步骤。')
-    mode='context-rules'
-    if u.consents.get('diet') and u.consents.get('external_ai'):
-        from .ai_services import revision
-        latest=s.scalars(select(Record).where(Record.user_id==u.id,Record.kind=='ai-insight').order_by(Record.created_at.desc())).first()
-        if latest and latest.data.get('revision')==revision(s,u):
-            questions=latest.data.get('questions',[])+questions;mode='ai-and-context'
-    return {'questions':list(dict.fromkeys(questions))[:5],'mode':mode}
+async def suggestions(page:str='',conversation_id:str|None=None,offset:int=Query(default=0,ge=-840,le=840),u=Depends(user),s=Depends(db)):
+    if conversation_id:owned_conversation(s,u,conversation_id)
+    from .suggestions import suggest
+    return await suggest(page,conversation_id,offset,u,s)
 
 @router.post('/quick')
 def quick(u=Depends(user),s=Depends(db)):

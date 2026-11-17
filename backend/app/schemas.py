@@ -106,9 +106,30 @@ class ConversationInput(Strict):
 class FoodNameRequest(Strict):
     name: str = Field(min_length=1, max_length=80)
 
+class PantryIngredient(Strict):
+    name:str=Field(min_length=1,max_length=80)
+    quantity:float|None=Field(default=None,gt=0,le=100000)
+    unit:str=Field(default='',max_length=20)
+    @field_validator('name','unit')
+    @classmethod
+    def clean(cls,value):
+        value=value.strip()
+        return value
+
 class RecipeRequest(Strict):
     ingredients: list[str] = Field(default_factory=list, max_length=20)
+    pantry:list[PantryIngredient]=Field(default_factory=list,max_length=20)
+    excluded:list[str]=Field(default_factory=list,max_length=20)
+    equipment:list[str]=Field(default_factory=list,max_length=10)
+    difficulty:Literal['any','easy','medium']='any'
+    adjustment:str=Field(default='',max_length=1000)
+    previous_id:str|None=Field(default=None,max_length=64)
     flavor: Literal['any','light','savory','spicy'] = 'any'
+    @field_validator('ingredients','allergens','excluded','equipment',check_fields=False)
+    @classmethod
+    def bounded_inputs(cls,values):
+        if any(not v.strip() or len(v)>80 for v in values):raise ValueError('条目需为1–80字')
+        return list(dict.fromkeys(v.strip() for v in values))
     max_minutes: int = Field(default=30, ge=5, le=120)
     allergens: list[str] = Field(default_factory=list, max_length=20)
     servings: int = Field(default=1, ge=1, le=6)
@@ -118,7 +139,16 @@ class RecipeStep(Strict):
     detail: str = Field(min_length=1, max_length=400)
     heat: str = Field(default='', max_length=120)
 
+class RecipeNutrition(Strict):
+    kcal:float=Field(ge=0,le=10000)
+    protein:float=Field(ge=0,le=1000)
+    fat:float=Field(ge=0,le=1000)
+    carbs:float=Field(ge=0,le=2000)
+
 class RecipeAnswer(Strict):
+    nutrition:RecipeNutrition|None=None
+    alternatives:list[str]=Field(default_factory=list,max_length=10)
+    missing_ingredients:list[str]=Field(default_factory=list,max_length=20)
     name: str = Field(min_length=1, max_length=80)
     minutes: int = Field(ge=1, le=180)
     ingredients_text: str = Field(min_length=1, max_length=600)

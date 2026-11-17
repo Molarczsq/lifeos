@@ -16,6 +16,9 @@ class Preferences(Strict):
 class ProfileTurn(Strict):
     text:str=Field(default='',max_length=1000)
     skip:bool=False
+    event:Literal['ANSWER','SKIP','BACK','COMPLETE']|None=None
+    version:int=Field(default=0,ge=0)
+    request_id:str|None=Field(default=None,max_length=80)
 class ProfileDraft(Strict):
     preferences:Preferences
     question:str=Field(max_length=300)

@@ -81,10 +81,25 @@ def mystery(body:MealRequest,u=Depends(user),s=Depends(db)):
 @app.post(P+'/recipes/recommend')
 async def recipe_recommend(body:RecipeRequest,u=Depends(user),s=Depends(db)):
     if not (u.consents.get('external_ai') and os.getenv('LLM_API_KEY')):
-        raise HTTPException(503,'未连接 AI 模型：需要部署者配置 LLM_API_KEY 等环境变量，并在「数据与隐私」开启「外部 AI 处理」。此功能不提供本地菜谱兜底。')
-    catalog={k:v['name'] for k,v in catalog_map(s,u).items()}
+        raise HTTPException(503,'AI 做菜服务暂不可用，请检查外部 AI 授权或稍后重试。')
+    from .ai_services import owned,revision,restrictions
+    from .recipes import inventory,validate_exclusions
+    catalog={k:v['name'] for k,v in catalog_map(s,u).items() if u.consents.get('diet') or not v.get('editable')}
+    if not inventory(body,catalog):raise HTTPException(422,'请至少添加一个食材')
+    if len(inventory(body,catalog))>20:raise HTTPException(422,'最多添加20种食材')
+    body=body.model_copy(update={'allergens':restrictions(s,u,body.allergens)})
+    validate_exclusions(' '.join(x['name'] for x in inventory(body,catalog)),body.allergens+body.excluded)
+    previous=None
+    rev=revision(s,u)
+    if body.previous_id:
+        prior=owned(s,u,body.previous_id,'cooking').data
+        if prior.get('revision')!=rev:raise HTTPException(409,'授权已变化，请重新生成菜谱')
+        previous=prior['recipes']
     try:
-        return await recommend_recipes(body,catalog)
+        result=await recommend_recipes(body,catalog,previous)
+        if revision(s,u)!=rev:raise HTTPException(409,'授权已变化，请重新生成')
+        saved=put(s,u,'cooking',{**result,'revision':rev})
+        return {**result,'id':saved['id']}
     except ProviderUnavailable:
         raise HTTPException(503,'AI 模型不可用或生成结果未通过结构校验与安全复核，请稍后重试。') from None
 @app.post(P+'/meals/feedback')

@@ -41,7 +41,7 @@ test('mobile registration → meal → advisor → cookie restore → login data
   await page.getByRole('button', {name:'打开AI顾问'}).click();
   await page.getByLabel('顾问问题').fill('下一餐蔬菜怎么选');
   await page.getByRole('button', {name:'发送问题'}).click();
-  await expect(page.getByText('模式：unavailable')).toBeVisible();
+  await expect(page.locator('.chat-messages')).toContainText('AI当前不可用');
   await page.getByRole('button', {name:'关闭顾问'}).click();
   await page.reload();
   await expect(page.getByRole('navigation', {name:'主导航'})).toBeVisible();
@@ -357,4 +357,49 @@ for(const width of [375,768,1024,1440])test(`full viewport glass background and 
   for(const ratio of readings.boundaries)expect(ratio).toBeGreaterThanOrEqual(3);
   await page.getByLabel('用户名',{exact:true}).fill(dark?'dark_readable':'light_readable');
  }
+});
+
+test('onboarding answers, skips, retry, duplicate protection and refresh recovery',async({page})=>{
+ await page.goto('/');await register(page,'profile_'+Date.now());await page.goto('/advisor?profile=1');
+ const dialog=page.getByRole('dialog');await expect(dialog.getByText('问题 1 / 5')).toBeVisible();
+ await dialog.getByLabel('我的回答',{exact:true}).fill('花生');await dialog.getByRole('button',{name:'继续建档'}).click();
+ await expect(dialog.getByText('问题 2 / 5')).toBeVisible();
+ let fail=true,requests=0;
+ await page.route('**/api/v1/ai/profile/turn',async route=>{requests++;if(fail){fail=false;await route.abort()}else{await new Promise(r=>setTimeout(r,300));await route.continue()}});
+ await dialog.getByRole('button',{name:'跳过',exact:true}).click();await expect(dialog.getByRole('alert')).toBeVisible();await expect(dialog.getByText('问题 2 / 5')).toBeVisible();
+ await dialog.getByRole('button',{name:'重试',exact:true}).click();await expect(dialog.getByText('问题 3 / 5')).toBeVisible();expect(requests).toBe(2);
+ await page.reload();await expect(dialog.getByText('问题 3 / 5')).toBeVisible();
+ for(let index=3;index<=5;index++){await dialog.getByRole('button',{name:'跳过',exact:true}).click();if(index<5)await expect(dialog.getByText(`问题 ${index+1} / 5`)).toBeVisible()}
+ await expect(dialog.getByText('建档问题已完成',{exact:true})).toBeVisible();await expect(dialog.getByText('未提供',{exact:true})).toHaveCount(4);
+ await dialog.getByRole('button',{name:'保存已填写信息'}).click();await expect(dialog.getByRole('button',{name:'已保存',exact:true})).toBeDisabled();
+ await dialog.getByRole('button',{name:'修改已填写信息'}).click();await dialog.getByLabel('我的回答',{exact:true}).fill('西红柿');await dialog.getByRole('button',{name:'继续建档'}).click();await dialog.getByRole('button',{name:'保存已填写信息'}).click();
+ await expect(dialog.getByRole('button',{name:'已保存',exact:true})).toBeDisabled();
+ const preferences=await page.request.get('/api/v1/ai/preferences');expect((await preferences.json()).preferences).toEqual({allergens:['花生'],likes:['西红柿']});
+});
+
+test('empty chat suggestions are explicit, click sends once and new session refreshes',async({page})=>{
+ await page.goto('/');await register(page,'suggest_'+Date.now());let sent=0,suggestions=0;
+ page.on('request',r=>{if(r.url().endsWith('/advisor/chat/stream'))sent++;if(r.url().includes('/advisor/suggestions?'))suggestions++});
+ await page.goto('/advisor');await expect(page.locator('.suggestion-grid button')).toHaveCount(4);expect(sent).toBe(0);
+ await expect(page.locator('.suggestion-grid')).toContainText('通用建议');
+ await page.getByLabel('输入问题',{exact:true}).fill('自己的问题');await expect(page.locator('.suggestion-grid')).toHaveCount(0);
+ await page.getByLabel('输入问题',{exact:true}).fill('');await expect(page.locator('.suggestion-grid button')).toHaveCount(4);
+ await page.locator('.suggestion-grid button').first().click();await expect(page.getByRole('button',{name:'复制消息',exact:true})).toBeVisible();expect(sent).toBe(1);
+ const before=suggestions;await page.getByRole('button',{name:'新建对话',exact:true}).click();await expect(page.locator('.suggestion-grid button')).toHaveCount(4);await expect.poll(()=>suggestions).toBeGreaterThan(before);expect(sent).toBe(1);
+ await expect(page.getByText(/模型已配置|待验证/)).toHaveCount(0);
+});
+
+test('custom cooking ingredients stay in sync through edit, removal and follow-up',async({page})=>{
+ await page.goto('/');await register(page,'cook_'+Date.now());await page.getByRole('button',{name:'怎么做菜',exact:true}).click();
+ await expect(page.getByRole('button',{name:'给我一份做法'})).toBeDisabled();
+ const input=page.getByLabel('添加已有食材',{exact:true});await input.fill('鸡蛋');await input.press('Enter');await expect(page.locator('.pantry-chip')).toHaveCount(1);
+ await input.fill('egg, 西红柿、土豆');await page.getByRole('button',{name:'添加食材',exact:true}).click();await expect(page.locator('.pantry-chip')).toHaveCount(3);
+ await page.getByRole('button',{name:'删除食材 土豆'}).click();await page.getByRole('button',{name:'编辑食材 西红柿'}).click();await page.getByLabel('修改食材 1').fill('tomatoes');
+ await page.getByLabel('数量 鸡蛋',{exact:true}).fill('2');await page.getByLabel('单位 鸡蛋',{exact:true}).fill('个');await page.getByLabel('不想使用的食材').fill('花生');await page.getByLabel('可用厨具').fill('炒锅');await page.getByLabel('难度',{exact:true}).selectOption('easy');
+ const bodies:Record<string,unknown>[]=[];
+ await page.route('**/api/v1/recipes/recommend',async route=>{bodies.push(route.request().postDataJSON());await route.fulfill({json:{id:'cooking-test-id',mode:'live-model',note:'测试专用模拟菜谱响应',recipes:[{id:'r1',name:'番茄炒蛋',minutes:15,ingredients_text:'鸡蛋，番茄',items:[],steps:[{title:'备料',detail:'切块',heat:'无'},{title:'炒制',detail:'炒熟',heat:'中火'}],heat_tips:'中火',note:'',matched_ingredients:2,nutrition:{kcal:200,protein:10,fat:10,carbs:20},missing_ingredients:['盐'],alternatives:['彩椒']}]}})});
+ await page.getByRole('button',{name:'给我一份做法'}).click();await expect(page.getByRole('heading',{name:'番茄炒蛋'})).toBeVisible();
+ expect(bodies[0]).toMatchObject({pantry:[{name:'鸡蛋',quantity:2,unit:'个'},{name:'tomatoes',quantity:null,unit:''}],excluded:['花生'],equipment:['炒锅'],difficulty:'easy'});
+ await expect(page.getByText('需要另备：盐')).toBeVisible();await page.getByLabel('继续调整菜谱').fill('少油一点');await page.getByRole('button',{name:'按新要求修改做法'}).click();await expect.poll(()=>bodies.length).toBe(2);expect(bodies[1]).toMatchObject({adjustment:'少油一点',previous_id:'cooking-test-id'});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

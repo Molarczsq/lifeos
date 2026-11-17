@@ -69,3 +69,6 @@ html,body{min-height:100%;background:var(--page)}
  .app{--surface:#fff;--glass-nav:#fff;--glass-header:#fff}
  .app.dark{--surface:#1c2e25;--glass-nav:#1c2e25;--glass-header:#1c2e25}
 }
+
+.recipe-inputs{border:0;padding:0;margin:0;min-width:0}.pantry-list{list-style:none;padding:0;display:grid;gap:12px}.pantry-chip{display:flex;align-items:center;flex-wrap:wrap;gap:10px;background:var(--glass-accent);border-radius:12px;padding:12px}.pantry-chip label{width:120px;max-width:100%;margin:0}.pantry-chip input{width:100%}.suggestion-grid small{display:block;margin-top:8px;font-size:11px;white-space:normal}.recipe-inputs details{margin-top:16px}.recipe-inputs textarea{max-width:100%}
+.quick-suggestions{display:grid;gap:8px}.quick-suggestions button{flex-direction:column;align-items:flex-start;text-align:left}.quick-suggestions small{font-size:10px}

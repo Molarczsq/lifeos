@@ -71,9 +71,17 @@ async def generate(prompt,schema,u,s):
 @router.get('/preferences')
 def get_preferences(u=Depends(user),s=Depends(db)):
     r=rows(s,u,'preferences');return {'preferences':r[-1].data if r else Preferences().model_dump(),'authorized':bool(u.consents.get('diet'))}
+@router.get('/profile')
+def profile_state(u=Depends(user),s=Depends(db)):
+    from .onboarding import state,public
+    return public(state(s,u))
+
 @router.post('/profile/turn')
 async def profile_turn(body:ProfileTurn,u=Depends(user),s=Depends(db)):
     require(u,'diet')
+    if body.event:
+        from .onboarding import turn
+        return turn(body,s,u)
     if body.skip:return {'skipped':True,'question':'可以随时回来补充。先记录一餐，或告诉我下一餐的想法。','action':None}
     if safety(body.text):raise HTTPException(422,safety(body.text))
     p=preferences(s,u)

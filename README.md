@@ -1,267 +1,184 @@
 # 智膳 LifeOS
-以饮食为核心的生成式 AI 智能体：Next.js + FastAPI + SQLAlchemy。支持多模态识餐、对话建档、生成式餐食规划、Function Calling、BM25 知识检索和确认后写入。无密钥时可手动记录、管理目录和检索知识；AI 生成明确显示不可用，不用固定食谱冒充。视觉能力需使用支持图片的模型。
 
-## 快速启动
-需要 Docker Engine / Docker Compose：
+以饮食记录、生成式餐食规划和日常生活方式问答为核心的 Web 应用。前端使用 Next.js，后端使用 FastAPI，数据保存在受保护的服务端数据库。AI 建议用于一般生活方式参考，不提供诊断、治疗或药物处方。
+
+## 核心功能
+
+- **记录一餐**：手动录入或多模态图片识别，核对食材、份量和营养估算后保存。用户上传图片经过类型、尺寸与内容验证，并按用户隔离。
+- **私人食物目录**：搜索、新增、编辑、删除、名称和图片去重；AI 草稿经用户确认才写入数据库。基础食物是明确的示例营养估计。
+- **对话式饮食建档**：回答、跳过、返回、保存；步骤与草稿存入数据库，刷新可恢复。跳过保存为 `null`（未提供），不会转换为默认答案。版本校验和请求 ID 防止重复提交；完成后可查看和修改。
+- **AI 饮食规划与盲盒**：结合授权范围内的记录、预算、忌口和本次需求生成方案；确认后写入饮食记录，重复确认不会重复保存。
+- **怎么做菜**：自由添加中文或英文食材，Enter、按钮及批量输入均可；支持常见别名去重、编辑、删除、数量、单位、排除食材、厨具、时间和难度。返回步骤、火候、营养估计、替代食材与需要另备的食材；可继续用自然语言修改。
+- **问问智膳**：独立 `/advisor` 和快捷悬浮窗，共享后端服务；支持流式回答、Markdown、图片问答、历史会话、重命名、删除、复制、停止与重新生成。
+- **推荐问题**：输入为空时自动展示，点击才发送；输入时折叠，清空后恢复。优先使用真实授权上下文，模型建议经过结构化校验，通用兜底明确标注。新会话重新请求，历史消息独立加载。
+- **隐私控制**：饮食、身体数据和外部 AI 分别授权，支持数据导出、删除记录、撤回授权。前端不展示供应商密钥配置或内部模型调试标签。
+- **统一视觉**：全屏随机食物背景、浅深色玻璃表面、移动导航、对话历史抽屉、减少动态效果及图片失败渐变兜底。
+
+## 技术架构
+
+`Next.js App Router / React / TypeScript → 同源 /api 代理 → FastAPI / Pydantic → SQLAlchemy → PostgreSQL`
+
+开发可使用 SQLite。服务端 OpenAI 兼容适配器处理结构化生成、重试和 SSE；有界工具编排调用记录查询、营养计算、规划和知识检索。知识库使用带来源的 WHO 摘要与 BM25 词项检索，未将其描述为向量 RAG。Redis 容器仅在 `future-cache` profile 下预留，当前未使用 Redis 或 pgvector 功能；没有 LangGraph 或网页直连 HealthKit 的实现。
+
+## 快速开始
+
+需要 Docker Engine 和支持 `!override` 的 Docker Compose：
+
 ```bash
 cp .env.example .env
-# 修改 POSTGRES_PASSWORD；本地默认不启用模型
-# 密码避免 URL 保留字符，或自行对 DATABASE_URL 做百分号编码
-docker compose up --build
+# 在服务端编辑 .env，至少设置 POSTGRES_PASSWORD
+# 密码若含 URL 保留字符，需要对 DATABASE_URL 正确编码
+docker compose up -d --build
 ```
-访问 http://localhost:3000。使用用户名、密码和图案验证码注册独立账户，无需邮箱，无预置共享用户。未登录时桌面侧栏和移动导航均隐藏。
-后端不对公网暴露端口；API 经 Next.js 同源代理。
-OpenAPI：http://localhost:3000/api/v1/openapi.json（见下述本地文档入口）。
+
+访问 `http://localhost:3000`。用用户名、密码和图案验证码注册；没有预置共享账户。后端和数据库不直接发布公网端口。
 
 ### 非 Docker 开发
-Python 3.12+、Node.js 22+、pnpm 11.25.0：
+
+需要 Python 3.12+、Node.js 22+、pnpm 11.25.0。
+
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -r backend/requirements.txt
+pip install -r backend/requirements.lock.txt
 cd backend
 uvicorn app.main:app --reload --port 8000
-# 另一个终端
+```
+
+另一个终端：
+
+```bash
 cd frontend
 pnpm install --frozen-lockfile
 pnpm dev
 ```
-开发数据库是 backend/lifeos.db；指定 DATABASE_URL 切换 PostgreSQL。API 文档 http://localhost:8000/docs ，OpenAPI http://localhost:8000/openapi.json。
-本地 Python 进程不会自动加载根 .env；先通过启动环境注入 LLM_*，勿把密钥放进前端变量。
 
-## 本次增量功能
-- 动态私人食物目录：可搜索、新增、编辑、删除；名称规范化去重；上传图片经校验和压缩后存入数据库，按内容去重。六种原基础食物继续作为只读演示种子。
-- AI 食物识别：支持目录外的新名称、类别、主要食材、每100g营养估计、估计份量。Schema 验证后显示草稿，用户确认才写入目录并刷新；重复图片复用识别记录。信息不足时询问补充，不编造必然识别结果。
-- `/advisor` 独立对话中心：会话搜索、创建、重命名、删除、Markdown/代码块、复制消息、多轮历史、图片问答、停止生成、失败重试和重新生成；移动端历史抽屉及安全区域输入栏。
-- 模型原生 SSE：向兼容模型发送 stream=true，逐步展示 JSON text 字段的草稿；草稿是待校验内容，完整 Schema 和安全检查后才保存最终回答。连接失败会清除草稿并明确降级；停止请求不保存未完成回答。快捷悬浮窗保留原事件流，并可携带会话 ID 打开完整中心。
-- 主动摘要生成后，其 AI 问题建议优先用于聊天；没有摘要时用透明上下文规则提供快捷问题，不宣称预测意图。
-- 前端隐私页已删除数据源连接与 AI 供应商配置区块，保留三个隐私开关、导出和删除数据。
+默认开发数据库为 `backend/lifeos.db`。Python 启动进程不会自动加载根 `.env`，应通过进程环境注入配置，勿将密钥复制到前端变量。
 
-### 能力边界
-AI 适配器、Function Calling、图片输入和 SSE 已实现；未将模拟测试称为真实模型成功。部署时仍须用自己的供应商和支持对应功能的模型验证。文字模型不一定支持图片。营养、份量均为估计；基础食物为示例种子。新规划使用模型生成，旧三款规则食谱仅保留在标记 deprecated 的兼容 API。RAG 使用六条有来源、版本和适用范围的 WHO 摘要进行中文 BM25 检索，不是向量数据库。Agent 使用至多两轮的有界工具编排，未引入 LangGraph。身体指标 API 为已授权 AI 上下文和历史数据兼容保留，独立身体仪表盘及平台连接目录已删除。规则安全检查不是医学诊断或完备风险检测。
+## 环境变量
 
-## 目录
-```text
-backend/app/         API、数据库、Schema、Agent、供应商适配、MCP
-backend/tests/       单元与API集成测试、模拟供应商契约测试
-backend/migrations/  PostgreSQL初始SQL
-frontend/app/        中文响应式界面
-frontend/tests/      Playwright移动端测试脚本
-.github/workflows/   后端测试与前端生产构建
-data/                合成健康导入样本与AI评测案例清单
-docs/                架构、验收结果、答辩大纲与演示脚本
-```
+以 [.env.example](.env.example) 为准，示例文件不包含真实密钥。
 
-## 模型配置
-服务端设置 LLM_API_KEY、LLM_BASE_URL（需包含 /v1 或供应商对应前缀）、LLM_MODEL。LLM_RESPONSE_FORMAT 默认 auto：官方 DeepSeek 地址使用 json_object，其他地址使用 json_schema；也可显式设置 json_object 或 json_schema。JSON 模式会将 Schema 写入提示词，所有输出仍经过服务端 Pydantic 校验，不合格时重试后降级。图片识别另需模型支持图像输入，文本模型接入成功不代表能识图。密钥从不返回浏览器，不接受客户端传入模型服务器地址。
-三个隐私选项对新账户默认开启；本版本首次启动会将现有账户的三个选项统一开启，迁移记录在 schema_migrations 中，只执行一次。用户之后手动关闭的选择会保留，不会在登录或重启时重新开启。关闭外部AI后不会发起外部请求。模型只获得已授权的上下文；仅发送同一授权版本内最近6轮聊天，变更授权后旧聊天不再进入上下文。工具名称与参数先校验再执行；不在白名单的模型工具调用被拒绝。输出结构通过 Pydantic 验证；失败重试一次后降级。快捷顾问输出步骤和最终回答；独立对话中心支持模型原生流式草稿，最终回答校验后保存。
-协议参考：https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
-知识来源：https://www.who.int/news-room/fact-sheets/detail/healthy-diet （摘要改写，非诊疗依据）。
-
-## 数据与安全
-- 账户密码采用带随机盐的 scrypt；数据库只存会话 token 的 SHA256，24小时有效，每次登录替换旧会话。
-- 饮食、健康上下文及外部 AI 默认开启，可在隐私页关闭；手动存储操作不等于允许将记录发给AI。
-- 所有用户数据查询限定 user_id；删除全部记录同时撤回授权。账户用户名和密码哈希保留用于登录；备份清理由部署者另行管理。
-- 当前模型：users、records 和 captcha_challenges。records.kind 区分 food/metric/chat/feedback/consent/mystery；不是声称已建齐需求中的全部规范化实体。
-- PostgreSQL 可先执行 migrations/001_initial.sql；应用首次启动也能建表。此次升级会在启动时幂等执行邮箱列到用户名列的迁移，并新增验证码表；对应 SQL 为 migrations/002_username_captcha.sql。旧用户 ID、密码哈希及记录保留，旧用户仍用原邮箱字符串作为登录名。禁止删库升级。
-- 单实例内存限流180次/分钟/IP。生产需代理按真实来源限流、HTTPS、COOKIE_SECURE=true、ALLOWED_ORIGINS设置准确域名、数据库备份、容量限制及合规审查。
-- 图像只在内存中转换，原图不入库；导入最多1000行/1MB；未来日期、单位错误、越界值拒绝，导入先整体验证再写入。
-- Redis容器仅在 future-cache profile 启用，当前没有使用Redis或pgvector功能。
-
-## 测试
-```bash
-cd backend && python -m pytest -q
-cd frontend && pnpm build
-# E2E 使用独立测试数据库与测试专用验证码服务，不可用于生产
-# 终端1，在仓库根目录：
-cd backend && DATABASE_URL=sqlite:///./e2e.db python -m tests.e2e_server
-# 终端2，在仓库根目录：
-cd frontend && pnpm exec playwright install webkit && CI=1 pnpm test:e2e
-```
-真实结果见 docs/TEST_REPORT.md。测试中的模型响应为隔离的契约模拟，不是实际AI验证。评测案例 data/eval-cases.json；图像准确率、误差、真实延迟均待测，不提供虚构指标。
-
-## MCP
-安装后从 backend 目录运行：
-```bash
-python -m app.mcp_server
-```
-这是标准 stdio MCP 服务。客户端配置 command 为当前虚拟环境 python，args 为 ["-m","app.mcp_server"]，cwd 为 backend。提供 search_knowledge 和 food_catalog，不读取任何私人用户数据。
-
-## GitHub与部署
-本地环境没有 Docker，尚未验证容器或远程部署。工程包含 GitHub Actions 与容器配置。创建自己的私有仓库可执行：
-```bash
-gh auth login
-gh repo create lifeos --private --source=. --remote=origin --push
-```
-Sites托管使用Cloudflare Workers，不直接支持本项目的FastAPI进程与PostgreSQL容器。请部署到支持Docker Compose的主机；不能仅部署前端静态文件并声称全栈上线。
-
-## 常见问题
-- AI识别503：未配置密钥、模型不支持图像/json_schema，或供应商超时；手动录入仍可使用。
-- 403：检查授权开关以及ALLOWED_ORIGINS是否匹配浏览器域名。
-- 推荐为空：预算不足、未知过敏原或所有候选被不喜欢排除；当前目录有限，不降低过敏原约束。
-- Cookie登录失败：本地HTTP使用COOKIE_SECURE=false；生产HTTPS使用true。
-- 导入失败：使用样本列名；recorded_at含时区；单位为steps/hours/bpm/minutes。
-
-## 用户名注册与 Cookie 会话
-- 新注册用户名：3–32位中文、英文字母、数字或下划线，去除首尾空白，英文统一小写；密码仍需10–128字符。
-- GET /api/v1/auth/captcha 返回 PNG 数据URL、随机挑战ID和300秒有效期；答案摘要与浏览器绑定摘要保存在数据库，答案不会返回前端。
-- POST /api/v1/auth/register 接收 username、password、captcha_id、captcha_answer；验证码一次性消费，过期/错误/跨浏览器使用均拒绝。刷新使同浏览器旧验证码失效。
-- POST /api/v1/auth/login 只接收 username、password，并使用数据库中的加盐密码哈希比对。
-- 注册成功自动登录；登录会轮换24小时有效的 HttpOnly / SameSite=Strict 会话Cookie。GET /api/v1/me 恢复用户名和授权，饮食/健康数据仍由受保护API读取。
-- Cookie不保存用户名密码、健康数据或客户端可篡改的身份资料；退出使数据库中的会话立即失效，前端清除私有缓存。
-- 验证码仅为基础防自动化措施，不是强抗机器人服务；当前支持换图，尚无音频验证码。
-- Docker只打包 backend/app，绝不导入测试专用验证码服务。E2E服务器使用已知测试图片字符，仅用于自动化测试。
-
-## 一键验证并推送
-在系统终端、项目根目录执行 `bash scripts/verify-and-push.sh`。需要已配置Python依赖、Node/pnpm和GitHub CLI登录。脚本要求干净的main分支，通过完整后端测试和前端构建后才推送，并等待本提交的云端检查。日志保存在被Git忽略的 `.verification-logs/`，失败时显示具体阶段。不会部署容器或删除数据库。
-
-## 页面与 API
-
-页面：`/` AI健康驾驶舱（含识餐、规划、盲盒、知识库及必要的历史和隐私），`/advisor` 独立对话中心。所有私人 API 均要求现有 HttpOnly 会话 Cookie；未登录进入中心显示注册/登录面板。
-
-|API|用途|
+|变量|用途|
 |---|---|
-|GET/POST `/api/v1/food/catalog`|搜索（q）、新增目录；创建返回 created，重名复用|
-|PUT/DELETE `/api/v1/food/catalog/{id}`|编辑或删除用户自建条目；冲突409、无权限或不存在404|
-|POST `/api/v1/food/analyze`|前端使用 ?preview=true 取得图片草稿，确认后入库；需要 external_ai；旧无preview协议保持兼容|
-|POST `/api/v1/media`|上传 JPEG/PNG/WebP，最多5MB及2000万像素；解码、去EXIF、压缩至1200px|
-|GET/DELETE `/api/v1/media/{id}`|私有图片读取/删除；删除后目录回到占位图|
-|GET/POST `/api/v1/advisor/conversations`|搜索标题、新建会话|
-|PATCH/DELETE `/api/v1/advisor/conversations/{id}`|重命名、删除会话及消息|
-|GET `/api/v1/advisor/conversations/{id}/messages`|按会话读取历史|
-|GET `/api/v1/advisor/suggestions`|传 page/conversation_id 获取上下文建议|
-|POST `/api/v1/advisor/chat/stream`|message、conversation_id、image_id、stream、regenerate_id；返回 SSE|
+|`POSTGRES_PASSWORD`|Docker 数据库密码|
+|`DATABASE_URL`|本地后端连接；Compose 内按数据库配置构造|
+|`LLM_API_KEY`|仅服务端保存的模型密钥|
+|`LLM_BASE_URL`|OpenAI 兼容服务地址，包含供应商要求的路径前缀|
+|`LLM_MODEL`|模型名称；视觉输入须选择支持图片的模型|
+|`LLM_RESPONSE_FORMAT`|`auto`、`json_object` 或 `json_schema`；auto 对官方 DeepSeek 地址使用 JSON 模式|
+|`LLM_INPUT_USD_PER_MILLION` / `LLM_OUTPUT_USD_PER_MILLION`|可选服务端成本估计；未配置时不伪造成本|
+|`ALLOWED_ORIGINS`|允许的浏览器来源，逗号分隔|
+|`COOKIE_SECURE`|本地 HTTP 为 false，生产 HTTPS 为 true|
+|`API_INTERNAL_URL`|前端构建时的内部 API 代理目标；变更后重新构建|
 
-SSE 事件：session、step、draft（临时完整文本快照）、answer（最终结果）、done。客户端终止用 AbortController；断线不盲目重发，应先读取历史再重试，避免已保存回答重复生成。重新生成原子替换所选回答；后续历史应通过新会话分支处理，目前 UI 仅允许重新生成最后一轮。
+## AI 能力与限制
 
-图片不接受外部 URL，不进行服务端 URL 抓取。图片权限与目录、会话相同，按用户隔离。创建食物必须填写每100g的营养数据；AI 给出的内部置信度、模型来源和验证状态留在数据库，不作为用户可见的准确率承诺。占位图为本地分类 SVG，标记“非实拍”，不使用未经授权网络图片。
+真实模型用于识餐、餐食规划、烹饪指南、问答及问题建议。无密钥时仍可手动记录、管理食物、填写/跳过建档和检索知识；做菜与规划明确报不可用，不用固定菜谱冒充生成结果。建议问题可退回明确标注的通用问题；顾问保留明确标识的规则参考与错误提示。
 
-数据库迁移见 [004说明](backend/migrations/004_catalog_media_conversations.md)。账户和历史数据保留；`/data/export` 包含目录、会话和记录，原始图片二进制可通过私有媒体API读取；`DELETE /data` 同时清除新目录、会话与压缩图片。
+图片只能提供估计，不能准确测量隐藏成分和重量。结构化结果经 Pydantic 校验；供应商失败有超时和重试。用户不满意时可以修改，而不是自动采纳。营养、份量和价格均非实测值。已知食材名称及常见别名的排除检查不能保证所有调味料或交叉接触安全。
 
-## 增量开发验证
-```bash
-cd backend
-python -m pytest -q
-cd ../frontend
-pnpm install --frozen-lockfile
-pnpm lint
-pnpm typecheck
-NEXT_TELEMETRY_DISABLED=1 pnpm build
-pnpm exec playwright install --with-deps webkit
-# 单独测试数据库与固定验证码，仅用于测试，绝不用于生产
-# 另一个终端：cd backend && DATABASE_URL=sqlite:////tmp/lifeos-e2e.db python -m tests.e2e_server
-CI=1 pnpm test:e2e
-```
-`tests/e2e_server.py` 仅固定测试验证码，不模拟供应商。后端供应商契约测试使用明确的 MockTransport / monkeypatch，无需真实密钥。E2E 不设置模型密钥，验证明确的模型不可用路径、UI、Cookie、目录和会话数据链路。真实供应商、视觉准确率、真实调用延迟不在这些测试结论内。
+流式输出的草稿在完成结构与安全校验前不是最终回答；失败、停止或授权变化时不会把未经校验的内容作为完成结果保存。工具调用是实际执行事件，不展示虚构思考过程。
 
-## 统一设计系统与图鉴更新
+推荐问题只读取被授权的数据；历史话题限当前授权版本的本人会话。模型建议按上下文、会话、页面、时段及授权版本缓存5分钟。客户端时区偏移仅用于时段与今日推荐，不改变原饮食统计的 UTC 日界。
 
-首页各模块与 `/advisor` 共用 `AppShell`、主导航、顶栏、品牌和设计Token。聊天历史改为按需打开，保留流式对话和所有会话操作。食物目录采用响应网格与详情弹窗，“添加食物”支持AI图片草稿、名称AI补充和手动录入，确认后保存。
+本项目使用 AI 辅助开发；测试替身与真实供应商调用严格区分。没有发布未经测量的识别准确率或性能指标。
 
-图片优先采用用户上传的对应照片；不再将整盘照片自动绑定多项食物。没有可靠单品照片时显示带“非实拍”标识的原创分类SVG。基础6种食物已配备核验过的开放许可照片，详情展示作者和许可，见 [图片授权记录](docs/FOOD_IMAGE_CREDITS.md)。开放式在线图库搜索和生成服务尚未接入。图片修复按钮以每批20项处理历史关联，任务状态按用户持久化。
+## API 文档
 
-新增接口：`POST /api/v1/food/catalog/suggest`、`POST /api/v1/food/analyze?preview=true`、`POST /api/v1/food/images/repair`、`GET /api/v1/food/images/jobs`。使用既有Cookie认证。图片字段扩展已有JSON，不需要删除数据库或重建数据卷。环境变量沿用现有LLM配置。
-
-组件结构、图片来源规则、兼容说明和测试方式见 [统一设计说明](docs/DESIGN_SYSTEM.md)。
-
-
-## 生成式饮食智能体（v3）
-
-六条主导航共用原 AppShell：`/?tab=overview`、`scan`、`plan`、`box`、`catalog` 和 `/advisor`。隐私与历史在页头保留入口。没有新建第二套品牌或前端密钥配置。
-
-- **对话建档**：顾问内“饮食建档”一次询问必要信息，可跳过；结构化饮食偏好经确认保存，自动用于已授权的下一餐规划。活动信息另受身体上下文授权控制，不强制收集身体指标。
-- **生成式规划与盲盒**：预算、现有食材、忌口和自然语言追问进入真实模型；支持均衡、惊喜、高蛋白、蔬菜优先、低预算、冰箱食材模式。服务端校验预算和已知过敏原别名，按每100g营养确定性计算合计。无法保证隐藏过敏原或交叉接触安全。
-- **聊天中的行动**：七个有参数工具：`add_meal`、`get_food_nutrition`、`get_day_structure`、`retrieve_knowledge`、`safety_screen`、`navigate_to_page`、`plan_recipe`。模型实际选择工具；未知 ID 先查目录，最多两轮。菜谱可在聊天内生成或通过“聊菜谱”调整。所有保存先显示确认卡片，站内导航需用户点击。
-- **主动建议**：进入驾驶舱/规划或保存一餐后生成有依据的摘要；30秒冷却、相同授权与数据30分钟缓存，无记录显示引导。AI 建议不会把漏记推断成未进食。
-- **知识库**：自然语言 BM25 检索与私人食物目录并列；名称 AI 草稿、图片草稿、人工修正、私有图片访问和原图片补全流程保留。
-- **语音**：浏览器 SpeechRecognition 开始/停止、授权提示、文字编辑；不自动发送，不支持时保留打字。浏览器服务可能处理录音，未声称本地离线识别。
-
-### AI Gateway 与数据流
-
-`llm.py` 负责模型适配、Schema、重试、SSE 和用量采集；`ai_services.py` 负责偏好/规划/摘要/确认事务；`agent_tools.py` 定义工具注册表；`ai_advisor.py` 执行有界编排；`knowledge.py` 负责 BM25；`agents.py` 复用输入分流和输出审查。工具参数、用户权限、授权版本分别验证。
-
-请求 → 安全与授权检查 → 模型选择工具 → 真实查询/知识检索 → 结构化生成 → 约束校验 → 展示草稿与来源 → 用户确认 → 数据库写入 → 更新上下文。
-
-### 新 API（均需 HttpOnly 会话）
+开发时访问后端 `http://localhost:8000/docs` 和 `/openapi.json`。生产不为此开放后端公网端口。业务 API 使用 `/api/v1`，除注册、登录、验证码和健康检查外均验证会话。
 
 |接口|用途|
 |---|---|
-|GET `/api/v1/ai/preferences`|读取本人的偏好|
-|POST `/api/v1/ai/profile/turn`|建档提取或跳过，不直接保存|
-|POST `/api/v1/ai/plans`|生成/追问规划；`previous_id` 读取本人且授权版本相同的方案|
-|GET `/api/v1/ai/actions/{id}`|查看本人确认动作|
-|POST `/api/v1/ai/actions/{id}/confirm` 或 `/cancel`|幂等确认/取消，过期或授权变化返回409|
-|GET `/api/v1/ai/context`|已授权今日饮食卡片，日期边界明确为UTC|
-|POST `/api/v1/ai/insights`|有冷却和缓存的主动建议|
-|GET `/api/v1/ai/usage`|本人已报告Token与估计成本；未知用量单独计数|
-|POST `/api/v1/advisor/quick`|取得本人的快捷会话|
-|POST `/api/v1/advisor/chat/stream`|新客户端使用 `agent_version:2`；旧协议保留兼容|
+|`GET /ai/profile`|读取本人建档进度|
+|`POST /ai/profile/turn`|`event: ANSWER/SKIP/BACK/COMPLETE`，携带 `version`、`request_id`；旧文本建档请求仍兼容|
+|`GET /ai/preferences`|查看已保存的偏好|
+|`GET /advisor/suggestions`|`page`、可选 `conversation_id`、`offset`；返回带 id/text/reason/type 的 suggestions，保留旧 questions 字段|
+|`POST /recipes/recommend`|自由 `pantry: [{name,quantity,unit}]`；兼容旧 ingredients；支持 excluded、allergens、equipment、difficulty、adjustment、previous_id|
+|`POST /food/analyze`|图片识别草稿|
+|`GET/POST /food/entries`|饮食记录|
+|`GET/POST/PATCH/DELETE /food/catalog…`|私人食物目录管理，具体路径见 OpenAPI|
+|`POST /media`|私有图片上传；GET/DELETE `/media/{id}` 验证所有权|
+|`POST /ai/plans`|模型餐食规划|
+|`POST /ai/actions/{id}/confirm`|确认写入，支持幂等|
+|`POST /advisor/chat/stream`|SSE 对话，支持 v2 编排及原协议|
+|`GET/POST /advisor/conversations`|会话列表与新建；具体会话支持消息、重命名和删除|
+|`GET /knowledge/search`|带来源的知识检索|
+|`GET /data/export`、`DELETE /data`|数据导出、删除记录并撤回授权|
 
-403表示缺少授权，404用于不存在或他人记录，409表示过期/授权变化，422表示参数或生成结果约束失败，503表示模型不可用。完整请求结构见 FastAPI `/docs`。
+验证失败返回422，未授权返回403，其他用户资源返回404，版本冲突返回409，AI服务不可用返回503。前端保留输入、当前步骤与可重试提示。
 
-### 环境变量与迁移
+## 项目结构
 
-继续使用服务端 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_RESPONSE_FORMAT`。可选 `LLM_INPUT_USD_PER_MILLION`、`LLM_OUTPUT_USD_PER_MILLION` 由部署者填写计价；未填时成本为未知。供应商未报告的流式Token也标记未知，不能当零成本；价格估计不是供应商账单。这里只统计新建档、规划、摘要及 v2 顾问调用。
-
-新增记录复用现有 `records`：`preferences`、`plan`、`action`、`ai-insight`、`ai-usage`；无需删表、重建库或导入附件localStorage。动作有效1小时，按用户隔离，并绑定授权版本。Docker按原启动方式更新，已有卷须保留。附件移植与删除决策见 [AI迁移审计](docs/AI_MIGRATION.md)。
-
-技术亮点是可验证的工具调用、可解释检索、确认后写入、生成式约束规划和授权版本隔离，而非堆叠Agent名称。商业上可围绕饮食规划订阅探索，当前无收费或医疗服务功能。
-
-## 随机背景系统（2026-11）
-
-公共背景仅使用本次用户明确提供的七张饮食图片；来源记录为“用户提供，用于本项目公共背景”，不宣称第三方开放许可。用户账户上传的餐食图片永远不会自动进入此资源池。
-
-- `BackgroundProvider` 统一选图，`RandomBackground` 管理加载与切换，`BackgroundOverlay` 提供遮罩；所有页面仍复用原 AppShell、Sidebar 和 Header。
-- 所有 AppShell 页面启用，包括识餐、目录、历史、设置和完整顾问。公共卡片使用半透明底色；聊天消息、识别结果和表单使用更高不透明度的阅读层。
-- `frontend/lib/background-pool.json` 记录来源、主题、尺寸和启用状态。页面内保持稳定，切换页面避免连续重复；sessionStorage 只保存装饰图片 ID，不含健康信息。
-- SSR 先显示品牌渐变，客户端挂载后选择图片，避免随机 hydration 不一致。当前图 eager/high priority 加载，不预先下载整个图片池；失败回退品牌渐变。
-- `backgroundConfig.autoRotateMs` 默认 0（关闭），启用时最低间隔10秒，650ms淡入淡出；减少动态效果偏好关闭自动轮换及动画。浅色/深色遮罩位于 `app/glass.css` 的 `.background-overlay`，浅色18–28%、深色42–58%；不再叠加径向透明蒙版。
-- 生成桌面和手机 WebP 变体，资源生成时不放大原图。宽度不足1000px的原图不用于桌面；显示时按 cover 等比例铺满视口，允许裁切和缩放，超大屏原图清晰度仍受资源分辨率限制。手机约13–79KB/张，桌面可用资源约116–230KB/张；切换只按需加载下一张。
-- 文件名含内容哈希，`next.config.ts` 为 `/backgrounds/` 设置一年 immutable 缓存。替换图片必须重新生成文件名，不能覆盖同名资源。
-
-添加公共资源：确认图片适用于公开展示后，修改 `frontend/scripts/generate-backgrounds.mjs` 中的明确文件列表，运行：
-
-```bash
-cd frontend
-node scripts/generate-backgrounds.mjs /path/to/approved-images
-pnpm lint && pnpm typecheck && pnpm build
-pnpm test:e2e
+```text
+backend/app/         API、Schema、认证、记录、模型适配与工具
+backend/tests/       单元、API和模拟供应商契约测试
+backend/migrations/ 历史数据库迁移说明
+frontend/app/        页面、AppShell入口、公共玻璃样式
+frontend/components/建档、食材表单、聊天等组件
+frontend/tests/      Playwright浏览器回归
+frontend/public/    公共静态资源；不包含私人上传图片
+.github/workflows/  后端、前端、WebKit E2E检查
+deploy/             VPS反向代理与Compose配置
+docs/               架构、功能、部署与使用说明
+data/               明确标记的合成导入与评测样本
 ```
 
-检查 pool 元数据及新图内容后提交；不要将上传目录或数据库图片自动扫描进公共池。本次只增加静态资源，无数据库迁移或新环境变量。
+新增建档、问题建议缓存和做菜历史复用 `records` 的 `onboarding`、`suggestions`、`cooking` 类型，按用户隔离，无需重建数据库。历史迁移由启动时的版本记录管理；升级禁止删除已有卷。
 
-### 背景验证与性能采样
+## 测试
 
-E2E 覆盖背景加载、缓存、页面内稳定、切页去重、图片故障回退、减少动画/深色模式及原有登录、记录、聊天流程；布局覆盖375、768、1024、1440px。
+```bash
+cd backend
+python -m pytest -q
+# 回到项目根目录后
+cd frontend
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm exec playwright install --with-deps webkit
+```
 
-可在启动生产构建后执行 `BASE_URL=http://localhost:3000 node scripts/background-performance.mjs`，需先安装 Playwright Chromium。脚本在375/1440px各采样启用/禁用背景各3次，保存 LCP、CLS、图片请求及截图到 `test-results/`。这是本机无网络/CPU限速的小样本诊断，不代表真实用户或生产性能；禁用组通过阻断图片模拟品牌渐变兜底。
+E2E 使用独立测试数据库与专用验证码服务，不能用于生产：
 
-域名、DNS、HTTPS、Cookie 与 VPS 更新说明见 [VPS部署记录](docs/VPS_DEPLOYMENT.md)。
+```bash
+# 终端1，项目根目录
+cd backend
+DATABASE_URL=sqlite:///./e2e.db python -m tests.e2e_server
+# 终端2，项目根目录
+cd frontend
+CI=1 pnpm test:e2e
+```
 
-本次本机验收：`python -m pytest -q` 86通过；`tsc --noEmit`、`eslint .`、`next build`通过；生产构建 WebKit E2E 15通过。Chromium 12次采样无水平溢出，每页至多1个背景请求；375px LCP中位数禁用/启用476/448ms，1440px为288/280ms，最大CLS分别约0.00200/0.00035。这些差异在小样本噪声范围内，不能据此宣称背景提升性能。初次测试发现目录图片断言未等待加载，已改为等待解码完成；一次本地重建干扰了正在运行的测试，分开构建与测试后全套通过。
+API 测试通过模拟模型验证请求内容、Schema、权限和异常分支，不代表真实模型成功。浏览器菜谱用例中的模拟响应只用于表单契约验证。真实供应商验收需要部署者配置密钥后另行执行，不能根据 `/healthz` 中存在配置就宣称模型可用。
 
-## 「怎么做菜」：纯模型菜谱推荐（可选增量）
+## 部署
 
-`POST /api/v1/recipes/recommend` 按手里的食材、口味、可用时间、份数与忌口，由已配置的 OpenAI 兼容模型直接生成 1–3 道菜的做法，返回菜名、用料、分步做法与每步火候。结果经 `RecipePlan` JSON Schema 校验与 `review_answer` 安全复核，模型编造的食物目录 id 会被过滤；能被关联到目录的菜可沿用现有的记录、反馈与反事实模拟接口。
+当前项目使用 VPS + Docker Compose + Caddy，规范入口为 `https://yeta-lifeos.xyz`。操作方法、域名与证书诊断见 [VPS部署记录](docs/VPS_DEPLOYMENT.md)。
 
-此功能**必须连接模型**：需部署者配置 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`，且用户在「数据与隐私」开启「外部 AI 处理」。未配置、未授权、模型失败或输出被复核拦截时，接口返回 503 并给出中文说明，**不提供本地菜谱库兜底**，也不会把规则输出称为模型生成。与项目已有的生成式饮食工作流定位不同，这是一条轻量、只出做法的入口；若维护者认为重复，可直接不合并。
+```bash
+sudo docker compose -p lifeos -f compose.yml -f deploy/compose.vps.yml up -d --build
+sudo docker compose -p lifeos -f compose.yml -f deploy/compose.vps.yml ps
+```
 
-模型输出未经人工逐条核验；份量与营养均为估计，调味料与另备食材需自行准备；忌口由模型按要求排除，服务端无法核实别名、调味料成分与交叉接触风险。设计与验证边界见 [docs/RECIPES_MODEL_ONLY.md](docs/RECIPES_MODEL_ONLY.md)。
-v4.0背景初版本机验收：`python -m pytest -q` 86通过；`tsc --noEmit`、`eslint .`、`next build`通过；生产构建 WebKit E2E 15通过。Chromium 12次采样无水平溢出，每页至多1个背景请求；375px LCP中位数禁用/启用476/448ms，1440px为288/280ms，最大CLS分别约0.00200/0.00035。这些差异在小样本噪声范围内，不能据此宣称背景提升性能。初次测试发现目录图片断言未等待加载，已改为等待解码完成；一次本地重建干扰了正在运行的测试，分开构建与测试后全套通过。
+保留 `.env`、数据库和证书卷，更新前备份；不要执行 `down -v`。VPS 的离线 Python wheel 构建使用本机 override，见部署记录。不能仅部署静态前端并认为后端、数据库和 AI 已上线。
 
+## 隐私与安全
 
-### v4.1 全屏背景与轻量玻璃样式
+- 密码用带随机盐的 scrypt；服务端存会话 token 摘要，Cookie 为 HttpOnly / SameSite=Strict，生产加 Secure。每次登录轮换会话。
+- 新账户三个上下文/外部AI选项默认开启，可在隐私页撤回；后续登录不会重置用户修改。需要处理本人数据时仍逐项校验授权。
+- 图片重编码后作为私有资产入库，用户上传照片不会进入公共背景池。公共背景仅使用项目明确收录的资源，来源见资源池元数据；有无图片失败均不会妨碍填写。
+- 私有数据只在服务端数据库中保存；Cookie 和 sessionStorage 不保存健康记录或密码。背景 sessionStorage 仅保存装饰图片ID。
+- 密钥只在服务端环境中，日志不输出密钥、模型请求正文或私人图片。前端删除内部模型状态标签，但保留授权、估算、上传失败与服务不可用信息。
+- 删除数据会清理记录、图片及会话并撤回授权，账户凭据仍保留用于登录；备份保留策略由部署者管理。
+- 目前单实例内存限流，生产扩容需要额外代理限流和运维监控。网页没有直接读取 HealthKit、微信运动等官方平台权限。
 
-背景移到 AppShell 的直接子层，根容器 `isolation:isolate` 与背景 `z-index:-1` 隔离层叠，覆盖导航与正文后方。固定 `inset:0`、`100vw`、`100dvh`（`100vh`兜底），图片 `object-fit:cover` / 居中裁切，不变形；滚动不移动，`pointer-events:none` 不截获点击。html/body 保留渐变的基础底色，AppShell、workspace、main 去除遮挡背景的实色层。
+## 设计与扩展
 
-公共 `frontend/app/glass.css` 统一样式：桌面卡片72%、侧栏80%、页头76%、弹窗94%、输入框90%，消息与数据阅读层92%；统一8px blur及WebKit前缀。手机卡片84%，导航/页头也提高不透明度。深色模式单独设置底色和文字。无 backdrop-filter 支持时公共卡片/导航回退实色。未对内容容器使用整体 opacity；图片淡入仍仅影响装饰图。
+公共视觉由 `app/glass.css` 和 `RandomBackground` 控制：全屏等比例cover、加载失败品牌渐变、减少动态效果、深浅色及移动阅读表面。背景资源配置和版权来源见 `lib/background-pool.json`、[图片说明](docs/FOOD_IMAGE_CREDITS.md)；不从用户图库自动收集公共背景。
 
-标题与页脚加局部阅读底色，避免文字直接压在随机照片上；辅助文字、链接、输入框边界及焦点统一使用高对比度颜色。对比度测试在纯黑/纯白极端图像底色上合成半透明表面，检查主要文字/主按钮≥4.5:1、输入框边界≥3:1，参照 [WCAG文字对比度](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) 和 [非文字对比度](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)。这些检查覆盖公共色彩组合，不等同于全站全部无障碍条款认证。
+MCP 使用标准 stdio：在 backend 目录执行 `python -m app.mcp_server`，提供公开知识检索与基础目录工具，不读取私人健康数据。其他说明见 [架构](docs/ARCHITECTURE.md)、[动态目录与顾问](docs/FEATURE_DYNAMIC_CATALOG_ADVISOR.md)、[做菜指南](docs/RECIPES_MODEL_ONLY.md)。
 
-新增回归检查375、768、1024、1440px的全屏几何、图片等比例cover、滚动固定、透明度、深浅色、输入可用性及对比度；继续运行原有注册、饮食、目录、聊天、隐私及背景故障回退测试。运行命令仍为 `pnpm typecheck && pnpm lint && pnpm build && pnpm test:e2e`，后端运行 `python -m pytest -q`。本次无数据库/API/环境变量变更。
+## License
 
-v4.1本机结果：TypeScript、ESLint、Next.js生产构建均通过；后端86项通过，WebKit E2E 19项通过（包含四种宽度、双主题、极端底色对比度）。Chromium检查了桌面/手机驾驶舱及顾问截图。测试使用隔离的本地规则模式后端，不把这些回归结果描述为本次重新验证了生产模型服务。
-
-云端首次运行发现快速A→B→A切页时复用已加载图片却等待新load事件的竞态。组件现在保留已加载帧状态，清理旧淡出定时器，并防止过期回调删掉当前帧；E2E固定选图顺序覆盖缓存回切。没有通过放宽断言或增加超时掩盖该问题。
-
-整合远端烹饪指南更新时，保留新增功能与导航，仅移除合并中重复带回的旧背景样式，避免原图尺寸限制和径向遮罩覆盖新版全屏样式。整合后后端89项测试通过。
+当前仓库没有独立的 LICENSE 文件；本次未新增或推定项目许可证。各开源依赖的许可证与声明保留在对应软件包中。

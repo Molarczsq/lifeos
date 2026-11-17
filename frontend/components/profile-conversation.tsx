@@ -1,0 +1,14 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {api} from '../lib/api';
+type State={version:number;index:number;total:number;status:string;saved:boolean;question:string;field:string|null;answers:Record<string,string|string[]|null>;fields:{key:string;question:string}[]};
+const labels:Record<string,string>={allergens:'过敏食物',avoid:'忌口',goal:'饮食目标',habits:'用餐习惯',likes:'喜欢的食物'};
+export function ProfileConversation(){
+ const [state,setState]=useState<State|null>(null),[text,setText]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const lock=useRef(false),retry=useRef<{event:string;text:string;version:number;request_id:string}|null>(null);
+ function accept(s:State){setState(s);const v=s.field?s.answers[s.field]:null;setText(Array.isArray(v)?v.join('、'):v||'')}
+ async function load(){setBusy(true);try{accept(await api('/ai/profile'));retry.current=null;setError('')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
+ useEffect(()=>{void load()},[]);
+ async function turn(event:string,isRetry=false){if(lock.current||!state)return;lock.current=true;setBusy(true);setError('');const body=isRetry&&retry.current?retry.current:{event,text,version:state.version,request_id:crypto.randomUUID()};retry.current=body;try{accept(await api('/ai/profile/turn',{method:'POST',body:JSON.stringify(body)}));retry.current=null}catch(e){setError((e as Error).message)}finally{lock.current=false;setBusy(false)}}
+ return <section className="card pad"><h3>聊聊你的饮食偏好</h3><p className="muted">回答或跳过都会保存建档进度；跳过记为未提供。核对后保存为饮食偏好，授权后才用于 AI 建议。</p>{state&&<><p role="status">{state.status==='complete'?'建档问题已完成':`问题 ${state.index+1} / ${state.total}`}{state.saved?' · 已保存':''}</p><progress aria-label="建档进度" value={state.index} max={state.total}/><p>{state.question}</p>{state.status!=='complete'&&<label>我的回答<input value={text} onChange={e=>setText(e.target.value)} maxLength={state.field==='habits'?300:200}/></label>}<div className="actions">{state.status!=='complete'?<><button type="button" disabled={busy||!text.trim()} onClick={()=>turn('ANSWER')}>继续建档</button><button type="button" className="ghost" disabled={busy} onClick={()=>turn('SKIP')}>跳过</button></>:<button disabled={busy||state.saved} onClick={()=>turn('COMPLETE')}>{state.saved?'已保存':'保存已填写信息'}</button>}{state.index>0&&<button className="ghost" disabled={busy} onClick={()=>turn('BACK')}>{state.status==='complete'?'修改已填写信息':'上一个问题'}</button>}</div><dl className="nutrition-details">{Object.entries(state.answers).map(([k,v])=><div key={k}><dt>{labels[k]}</dt><dd>{v===null?'未提供':Array.isArray(v)?v.join('、')||'明确无':v}</dd></div>)}</dl></>}{error&&<div role="alert">{error}<button disabled={busy} onClick={()=>state&&retry.current?turn(retry.current.event,true):load()}>重试</button><button className="ghost" disabled={busy} onClick={()=>load()}>刷新进度</button></div>}</section>
+}

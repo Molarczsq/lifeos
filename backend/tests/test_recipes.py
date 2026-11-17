@@ -3,7 +3,7 @@
 def test_recipes_requires_model(c):
     r=c.post('/api/v1/recipes/recommend',json={'ingredients':['chicken','broccoli']})
     assert r.status_code==503
-    assert '未连接 AI 模型' in r.json()['detail']
+    assert 'AI 做菜服务暂不可用' in r.json()['detail']
     c.put('/api/v1/consents',json={'external_ai':True})
     # consent alone is not enough: no provider key is configured
     assert c.post('/api/v1/recipes/recommend',json={}).status_code==503
@@ -34,7 +34,7 @@ def test_recipes_generated_by_mock_model(c, monkeypatch):
     assert {i['food_id'] for i in first['items']}=={'chicken','broccoli'}
     assert first['matched_ingredients']==2
     assert len(first['steps'])==2 and all(step['heat'] for step in first['steps'])
-    assert '未经人工逐条核验' in data['note'] and '花生' in data['note']
+    assert '按实际食材核对' in data['note'] and '花生' in data['note']
     c.post('/api/v1/food/entries',json={'items':first['items'],'label':first['name']})
     assert c.get('/api/v1/food/entries').json()
 
@@ -45,6 +45,6 @@ def test_recipes_model_failure_is_explicit(c, monkeypatch):
     monkeypatch.setenv('LLM_API_KEY','test-only')
     monkeypatch.setattr(recipes.OpenAICompatibleProvider,'generate',failing)
     c.put('/api/v1/consents',json={'external_ai':True})
-    r=c.post('/api/v1/recipes/recommend',json={})
+    r=c.post('/api/v1/recipes/recommend',json={'ingredients':['chicken']})
     assert r.status_code==503
     assert 'AI 模型不可用' in r.json()['detail']
